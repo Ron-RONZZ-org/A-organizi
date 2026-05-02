@@ -6,6 +6,7 @@ import typer
 
 from A import info, tr_multi
 from A_organizi.cli.etikedi import etikedoj_app
+from A_organizi.cli.taglibro import taglibro_app
 
 app = typer.Typer(
     name="organizi",
@@ -45,18 +46,7 @@ todo = typer.Typer(
 )
 app.add_typer(todo, name="todo")
 
-taglibro = typer.Typer(
-    name="taglibro",
-    help=tr_multi(
-        "Taglibro — administri taglibrajn enirojn.",
-        "Taglibro — manage journal entries.",
-        "Taglibro — gérer des entrées de journal.",
-    ),
-    no_args_is_help=True,
-    context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
-)
-app.add_typer(taglibro, name="taglibro")
-
+app.add_typer(taglibro_app, name="taglibro")
 app.add_typer(etikedoj_app, name="etikedo")
 
 # ── Stub commands (to be implemented in future issues) ───────────────────────
@@ -86,16 +76,4 @@ def aldoni(teksto: str) -> None:
     info(f"[dim]TODO: implement todo aldoni {teksto}[/dim]")
 
 
-@taglibro.command()
-def nun() -> None:
-    """Show today's entry."""
-    info("[dim]TODO: implement taglibro nun[/dim]")
-
-
-@taglibro.command()
-def skribi(teksto: str) -> None:
-    """Add entry to today's journal."""
-    info(f"[dim]TODO: implement taglibro skribi[/dim]")
-
-
-__all__ = ["app", "kalendaro", "todo", "taglibro", "etikedoj_app"]
+__all__ = ["app", "kalendaro", "todo", "taglibro_app", "etikedoj_app"]
