@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from pathlib import Path
 
 import typer
 from rich.table import Table
@@ -12,6 +13,7 @@ from A.utils.date import parse_partial_date, parse_partial_datetime
 from A.utils.output import console
 
 from A_organizi.service.kalendaro import get_evento_service, get_kalendaro_service
+from A_organizi.utils.ics import events_to_ics, insert_ics_events
 
 kalendaro_app = typer.Typer(
     name="kalendaro",
@@ -55,9 +57,7 @@ def _short(text: str, limit: int = 40) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Calendar management commands
-# ──────────────────────────────────────────────────────────────────────────────
+# ── Calendar management ──────────────────────────────────────────────────────
 
 
 @kalendaro_app.command()
@@ -403,6 +403,98 @@ def amase_forigi(
 
     deleted = svc.delete_by_date_range(start, end, cal_uuids or None)
     info(f"Forigis {deleted} evento(j)n.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ICS import / export
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@kalendaro_app.command()
+def importi(
+    kalendaro_uuid: str = typer.Argument(
+        ..., help="Kalendaro UUID."
+    ),
+    dosieroj: list[str] = typer.Argument(
+        ..., help="ICS-dosiero(j)."
+    ),
+) -> None:
+    """Importi ICS-dosierojn en kalendaron."""
+    cal_svc = get_kalendaro_service()
+    resolved_cal = cal_svc.resolve_uuid(kalendaro_uuid)
+    if not resolved_cal:
+        error("Kalendaro ne trovita.")
+        raise typer.Exit(1)
+
+    db = get_evento_service().db
+    added: list[str] = []
+    for file_path in dosieroj:
+        text = Path(file_path).read_text(encoding="utf-8")
+        added.extend(insert_ics_events(db, resolved_cal, text))
+
+    info(f"Importis {len(added)} evento(j)n.")
+
+
+@kalendaro_app.command()
+def eksporti(
+    argumentoj: list[str] = typer.Argument(
+        None, help="Evento UUID(j) aŭ opciaj limdatoj (YYYYMMDD/MMDD/DD)."
+    ),
+    kalendaro: list[str] | None = typer.Option(
+        None, "-k", "--kalendaro", help="Kalendaro UUID(j) por intervala eksporto."
+    ),
+    dosiero: str | None = typer.Option(
+        None, "-d", "--dosiero", help="Cela .ics dosiero."
+    ),
+) -> None:
+    """Eksporti eventojn laŭ UUID aŭ laŭ kalendaro+datoj."""
+    args = argumentoj or []
+    date_tokens: list[str] = []
+    refs: list[str] = []
+    for token in args:
+        if token.isdigit() and len(token) in (2, 4, 8):
+            date_tokens.append(token)
+        else:
+            refs.append(token)
+
+    svc = get_evento_service()
+    cal_svc = get_kalendaro_service()
+    rows: list[dict] = []
+
+    if refs:
+        for ref in refs:
+            uid = svc.resolve_uuid(ref)
+            if uid:
+                row = svc.get(uid)
+                if row:
+                    rows.append(row)
+    else:
+        today = date.today()
+        s_token = date_tokens[0] if date_tokens else None
+        e_token = date_tokens[1] if len(date_tokens) > 1 else None
+        start = parse_partial_date(s_token, ref=today) if s_token else today
+        end = parse_partial_date(e_token, ref=today) if e_token else start
+        if end < start:
+            start, end = end, start
+
+        cal_uuids: list[str] = []
+        if kalendaro:
+            for ref in kalendaro:
+                uid = cal_svc.resolve_uuid(ref)
+                if uid:
+                    cal_uuids.append(uid)
+
+        results = svc.list_by_date_range(start, end, cal_uuids or None)
+        rows = list(results)
+
+    payload = events_to_ics(rows)
+    if dosiero:
+        path = Path(dosiero)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(payload, encoding="utf-8")
+        info(f"Eksportis {len(rows)} evento(j)n al {dosiero}")
+    else:
+        typer.echo(payload.rstrip("\n"))
 
 
 __all__ = ["kalendaro_app"]
