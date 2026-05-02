@@ -36,10 +36,18 @@ If you need a utility that should be in A-core:
 ```
 src/A_organizi/
 ├── __init__.py       # Plugin exports
-├── cli.py           # Typer app with subcommands
-├── service.py     # Business logic
+├── cli/              # CLI package (split to avoid 500+ line monoliths)
+│   ├── __init__.py   # Main Typer app, sub-typer registrations
+│   ├── etikedi.py    # etikedoj (labels) commands
+│   ├── todo.py       # todo commands (future)
+│   ├── taglibro.py   # taglibro commands (future)
+│   └── kalendaro.py  # kalendaro commands (future)
+├── utils/
+│   ├── __init__.py
+│   └── labels.py     # Shared label helpers (resolve_refs, parse_blob, etc.)
+├── service.py        # Business logic (CRUDService singletons)
 └── data/
-    └── storage.py # SQLite (uses A.data.base)
+    └── storage.py    # SQLite (uses A.data.base)
 ```
 
 ## Database Schema
@@ -111,7 +119,7 @@ PYTHONPATH=../A-core/src:src .venv/bin/python -m pytest tests/ -v
 | Issue | Status | Description |
 |-------|--------|-------------|
 | #2 | ✅ Done | Storage schema + service infrastructure |
-| #3 | ⬜ Pending | Shared etikedoj (labels) CLI + service |
+| #3 | ✅ Done | Shared etikedoj (labels) CLI + service |
 | #4 | ⬜ Pending | taglibro CRUD + search |
 | #5 | ⬜ Pending | todo priority formula engine + CRUD + search |
 | #6 | ⬜ Pending | kalendaro calendar management + event CRUD |
