@@ -25,10 +25,8 @@ def setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
     monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
-    import A_organizi.service as svc_module
-
-    monkeypatch.setattr(svc_module, "_todo_service", None)
-    monkeypatch.setattr(svc_module, "_etikedo_service", None)
+    monkeypatch.setattr("A_organizi.service.todo._todo_service", None)
+    monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
 
 
 @pytest.fixture
@@ -286,10 +284,8 @@ class TestTodoCLI:
         monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
         monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
-        import A_organizi.service as svc_module
-
-        monkeypatch.setattr(svc_module, "_todo_service", None)
-        monkeypatch.setattr(svc_module, "_etikedo_service", None)
+        monkeypatch.setattr("A_organizi.service.todo._todo_service", None)
+        monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
 
     def test_aldoni(self):
         """Create a task via CLI."""

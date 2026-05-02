@@ -28,8 +28,8 @@ def setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     # Reset service singletons
     import A_organizi.service as svc_module
 
-    monkeypatch.setattr(svc_module, "_taglibro_service", None)
-    monkeypatch.setattr(svc_module, "_etikedo_service", None)
+    monkeypatch.setattr("A_organizi.service.taglibro._taglibro_service", None)
+    monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
 
 
 @pytest.fixture
@@ -243,8 +243,8 @@ class TestTaglibroCLI:
 
         import A_organizi.service as svc_module
 
-        monkeypatch.setattr(svc_module, "_taglibro_service", None)
-        monkeypatch.setattr(svc_module, "_etikedo_service", None)
+        monkeypatch.setattr("A_organizi.service.taglibro._taglibro_service", None)
+        monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
 
     def test_aldoni(self):
         """Create a journal entry via CLI."""

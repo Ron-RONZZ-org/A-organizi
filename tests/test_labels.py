@@ -327,9 +327,7 @@ class TestEtikedoCLI:
         monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
         # Reset service singletons for each test
-        import A_organizi.service as svc_module
-
-        monkeypatch.setattr(svc_module, "_etikedo_service", None)
+        monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
 
     def test_aldoni(self):
         """Create a label via CLI."""
