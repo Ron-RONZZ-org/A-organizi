@@ -42,9 +42,56 @@ src/A_organizi/
     └── storage.py # SQLite (uses A.data.base)
 ```
 
+## Database Schema
+
+### Tables
+
+| Table | PK | Key Columns | Notes |
+|-------|----|-------------|-------|
+| `kalendaroj` | `uuid` | `url`, `username`, `remote` | Calendar URLs |
+| `eventoj` | `uuid` | `kalendaro_uuid`, `titolo`, `komenco`, `fino` | Calendar events |
+| `todoj` | `uuid` | `titolo`, `titolo_norm`, `prioritato` (TEXT), `stato` | Tasks with formula priority |
+| `etikedoj` | `uuid` | `teksto`, `teksto_norm` (UNIQUE), `koloro` | Shared labels |
+| `todoj_etikedo` | `(todo_uuid, etikedo_uuid)` | — | Task-label junction |
+| `taglibro` | `uuid` | `titolo`, `titolo_norm`, `tempo` | Journal entries (multiple per day) |
+| `taglibro_etikedo` | `(taglibro_uuid, etikedo_uuid)` | — | Journal-label junction |
+
+### Key Design Decisions
+
+- **taglibro uses `uuid` PK** (not `dato`) — supports multiple entries per day (overrides old A-organizi schema, matches autish-legacy)
+- **Labels are shared** between todo and taglibro via `etikedoj` table with junction tables (matches autish-legacy `_tasklib` design)
+- **prioritato is TEXT** — stores formula strings like `"min(20+2*D,70)"` (matches autish-legacy)
+- **WAL mode** enabled via `SQLiteDB`
+
+## Service Layer
+
+Service follows the A-vorto / A-encik singleton pattern:
+
+```python
+from A_organizi.service import (
+    get_kalendaro_service,
+    get_todo_service,
+    get_taglibro_service,
+)
+```
+
+Each returns a `CRUDService` instance with `undo_size=30`.
+
+## Testing
+
+```bash
+cd A-organizi
+PYTHONPATH=../A-core/src:src .venv/bin/python -m pytest tests/ -v
+```
+
+### Test structure
+
+- `tests/test_storage.py` — Schema creation, CRUDService integration, service singletons
+- Tests use `tmp_path` + monkeypatching of `_DATA_DIR` for isolation
+
 ## Code Standards
 
-1. Use `tr()` for all user-facing strings
+1. Use `tr_multi()` for multi-language help text in CLI (not `tr()` with 3 args)
 2. Use `error()` for errors, `info()` for info
 3. Type hints on all public functions
 4. Docstrings on all public functions
@@ -54,10 +101,22 @@ src/A_organizi/
 ## What to Avoid
 
 - Don't duplicate A-core utilities
-- Don't skip i18n (use `tr()`)
+- Don't skip i18n (use `tr_multi()` / `tr()`)
 - Don't use `print()` — use `A` output functions
 - Don't hardcode paths — use `A.core.paths`
 - Don't implement utilities that should be in core
+
+## Progress
+
+| Issue | Status | Description |
+|-------|--------|-------------|
+| #2 | ✅ Done | Storage schema + service infrastructure |
+| #3 | ⬜ Pending | Shared etikedoj (labels) CLI + service |
+| #4 | ⬜ Pending | taglibro CRUD + search |
+| #5 | ⬜ Pending | todo priority formula engine + CRUD + search |
+| #6 | ⬜ Pending | kalendaro calendar management + event CRUD |
+| #7 | ⬜ Pending | kalendaro ICS import/export |
+| #8 | ⬜ Pending | kalendaro CalDAV sync + undo |
 ## Branch Convention
 
 All A-* repos use `main` as the primary branch. Use `main` for all development.
