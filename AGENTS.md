@@ -1,4 +1,5 @@
 # AGENTS.md — Rules for A-organizi
+This file extends [A-workspace](./workspace/AGENTS.md).
 
 This file extends root A-core AGENTS.md for the A-organizi plugin.
 
