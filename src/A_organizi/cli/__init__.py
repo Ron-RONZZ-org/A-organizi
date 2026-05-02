@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import typer
 
-from A import info, tr_multi
+from A import tr_multi
 from A_organizi.cli.etikedi import etikedoj_app
+from A_organizi.cli.kalendaro import kalendaro_app
 from A_organizi.cli.taglibro import taglibro_app
 from A_organizi.cli.todo import todo_app
 
@@ -21,37 +22,9 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
 )
 
-# ── Sub-typers ──────────────────────────────────────────────────────────────
-
-kalendaro = typer.Typer(
-    name="kalendaro",
-    help=tr_multi(
-        "Kalendaro — administri kalendarojn kaj eventojn.",
-        "Kalendaro — manage calendars and events.",
-        "Kalendaro — gérer calendriers et événements.",
-    ),
-    no_args_is_help=True,
-    context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
-)
-app.add_typer(kalendaro, name="kalendaro")
-
+app.add_typer(kalendaro_app, name="kalendaro")
 app.add_typer(todo_app, name="todo")
 app.add_typer(taglibro_app, name="taglibro")
 app.add_typer(etikedoj_app, name="etikedo")
 
-# ── Stub commands (to be implemented in future issues) ───────────────────────
-
-
-@kalendaro.command()
-def ls() -> None:
-    """List calendars."""
-    info("[dim]TODO: implement kalendaro ls[/dim]")
-
-
-@kalendaro.command()
-def nun() -> None:
-    """Show upcoming events."""
-    info("[dim]TODO: implement kalendaro nun[/dim]")
-
-
-__all__ = ["app", "kalendaro", "todo_app", "taglibro_app", "etikedoj_app"]
+__all__ = ["app", "kalendaro_app", "todo_app", "taglibro_app", "etikedoj_app"]
