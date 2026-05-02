@@ -123,7 +123,7 @@ PYTHONPATH=../A-core/src:src .venv/bin/python -m pytest tests/ -v
 | #4 | ✅ Done | taglibro CRUD + search |
 | #5 | ✅ Done | todo priority formula engine + CRUD + search |
 | #6 | ✅ Done | kalendaro calendar management + event CRUD |
-| #7 | ⬜ Pending | kalendaro ICS import/export |
+| #7 | ✅ Done | kalendaro ICS import/export |
 | #8 | ⬜ Pending | kalendaro CalDAV sync + undo |
 ## Branch Convention
 
