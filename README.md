@@ -65,3 +65,6 @@ A-organizi combines [autish kalendaro](https://github.com/Ron-RONZZ-org/autish/)
 ## License
 
 GPL-3.0-only
+---
+
+**Branch:** Use `main` for all development.

@@ -58,3 +58,6 @@ src/A_organizi/
 - Don't use `print()` — use `A` output functions
 - Don't hardcode paths — use `A.core.paths`
 - Don't implement utilities that should be in core
+## Branch Convention
+
+All A-* repos use `main` as the primary branch. Use `main` for all development.
