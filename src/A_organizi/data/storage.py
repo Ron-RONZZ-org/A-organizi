@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS taglibro_etikedo (
 # Indexes
 # ──────────────────────────────────────────────────────────────────────────────
 
+_CREATE_STMTS = [
+    _CREATE_KALENDAROJ,
+    _CREATE_EVENTOJ,
+    _CREATE_TODOJ,
+    _CREATE_ETIKEDOJ,
+    _CREATE_TODOJ_ETIKEDO,
+    _CREATE_TAGLIBRO,
+    _CREATE_TAGLIBRO_ETIKEDO,
+]
+
 _CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_eventoj_kalendaro ON eventoj(kalendaro_uuid);",
     "CREATE INDEX IF NOT EXISTS idx_eventoj_komenco ON eventoj(komenco);",
@@ -134,16 +144,7 @@ def get_db() -> SQLiteDB:
     ensure_dirs()
     db = SQLiteDB(_DB_FILE)
 
-    stmts = [
-        _CREATE_KALENDAROJ,
-        _CREATE_EVENTOJ,
-        _CREATE_TODOJ,
-        _CREATE_ETIKEDOJ,
-        _CREATE_TODOJ_ETIKEDO,
-        _CREATE_TAGLIBRO,
-        _CREATE_TAGLIBRO_ETIKEDO,
-    ]
-    for stmt in stmts:
+    for stmt in _CREATE_STMTS:
         db.execute(stmt)
     for stmt in _CREATE_INDEXES:
         db.execute(stmt)
@@ -151,4 +152,9 @@ def get_db() -> SQLiteDB:
     return db
 
 
-__all__ = ["ensure_dirs", "get_db"]
+__all__ = [
+    "ensure_dirs",
+    "get_db",
+    "_CREATE_STMTS",
+    "_CREATE_INDEXES",
+]

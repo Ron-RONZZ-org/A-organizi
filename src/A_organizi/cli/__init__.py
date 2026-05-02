@@ -1,10 +1,11 @@
-"""CLI for organiszi command (kalendaro, todo, taglibro)."""
+"""CLI for A-organizi (kalendaro, todo, taglibro, etikedoj)."""
 
 from __future__ import annotations
 
 import typer
 
 from A import info, tr_multi
+from A_organizi.cli.etikedi import etikedoj_app
 
 app = typer.Typer(
     name="organizi",
@@ -17,6 +18,8 @@ app = typer.Typer(
     invoke_without_command=True,
     context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
 )
+
+# ── Sub-typers ──────────────────────────────────────────────────────────────
 
 kalendaro = typer.Typer(
     name="kalendaro",
@@ -53,6 +56,10 @@ taglibro = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
 )
 app.add_typer(taglibro, name="taglibro")
+
+app.add_typer(etikedoj_app, name="etikedo")
+
+# ── Stub commands (to be implemented in future issues) ───────────────────────
 
 
 @kalendaro.command()
@@ -91,4 +98,4 @@ def skribi(teksto: str) -> None:
     info(f"[dim]TODO: implement taglibro skribi[/dim]")
 
 
-__all__ = ["app", "kalendaro", "todo", "taglibro"]
+__all__ = ["app", "kalendaro", "todo", "taglibro", "etikedoj_app"]
