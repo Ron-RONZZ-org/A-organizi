@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import typer
 
-from A import info, tr
+from A import info, tr_multi
 
 app = typer.Typer(
     name="organizi",
-    help=tr(
-        "Organizi — calendar, todo, journal microapp.",
-        "Organizi — calendar, todo, journal microapp.",
-        "Organizi — calendar, todo, journal microapp.",
+    help=tr_multi(
+        "Organizi — kalendaro, todo, taglibro.",
+        "Organizi — calendar, todo, journal.",
+        "Organizi — calendrier, tâches, journal.",
     ),
     no_args_is_help=False,
     invoke_without_command=True,
@@ -20,8 +20,8 @@ app = typer.Typer(
 
 kalendaro = typer.Typer(
     name="kalendaro",
-    help=tr(
-        "Kalendaro — manage calendars and events.",
+    help=tr_multi(
+        "Kalendaro — administri kalendarojn kaj eventojn.",
         "Kalendaro — manage calendars and events.",
         "Kalendaro — gérer calendriers et événements.",
     ),
@@ -32,10 +32,10 @@ app.add_typer(kalendaro, name="kalendaro")
 
 todo = typer.Typer(
     name="todo",
-    help=tr(
-        "Todo — manage tasks with labels and priority.",
-        "Todo — manage tasks with labels and priority.",
-        "Todo — gérer des tâches avec étiquettes et priorité.",
+    help=tr_multi(
+        "Todo — administri taskojn kun etikedoj.",
+        "Todo — manage tasks with labels.",
+        "Todo — gérer des tâches avec étiquettes.",
     ),
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
@@ -44,10 +44,10 @@ app.add_typer(todo, name="todo")
 
 taglibro = typer.Typer(
     name="taglibro",
-    help=tr(
-        "Taglibro — daily journal microapp.",
-        "Taglibro — daily journal microapp.",
-        "Taglibro — journal quotidien.",
+    help=tr_multi(
+        "Taglibro — administri taglibrajn enirojn.",
+        "Taglibro — manage journal entries.",
+        "Taglibro — gérer des entrées de journal.",
     ),
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help", "--helpo"]},

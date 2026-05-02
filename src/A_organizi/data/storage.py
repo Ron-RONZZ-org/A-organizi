@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from A import ensure_dirs as _ensure_dirs
 from A.data.base import SQLiteDB
 
 _DATA_DIR: Path = Path.home() / ".local" / "share" / "A"
+_DB_FILE: Path = _DATA_DIR / "organizi.db"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Calendars (kalendaro)
@@ -48,26 +48,33 @@ CREATE TABLE IF NOT EXISTS eventoj (
 _CREATE_TODOJ = """
 CREATE TABLE IF NOT EXISTS todoj (
     uuid TEXT PRIMARY KEY,
-    teksto TEXT NOT NULL DEFAULT '',
-    estado TEXT NOT NULL DEFAULT 'malfermita',
-    prioritato REAL NOT NULL DEFAULT 0.0,
-    fino TEXT NOT NULL DEFAULT '',
+    titolo TEXT NOT NULL,
+    titolo_norm TEXT NOT NULL,
+    priskribo TEXT NOT NULL DEFAULT '',
+    priskribo_norm TEXT NOT NULL DEFAULT '',
+    prioritato TEXT NOT NULL DEFAULT '0',
+    stato TEXT NOT NULL DEFAULT 'malfermita',
     kreita_je TEXT NOT NULL,
     modifita_je TEXT NOT NULL
 );
 """
 
-_CREATE_TIKEDOJ = """
+# ──────────────────────────────────────────────────────────────────────────────
+# Shared labels (etikedoj)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_CREATE_ETIKEDOJ = """
 CREATE TABLE IF NOT EXISTS etikedoj (
     uuid TEXT PRIMARY KEY,
     teksto TEXT NOT NULL,
+    teksto_norm TEXT NOT NULL UNIQUE,
     koloro TEXT NOT NULL DEFAULT '',
     kreita_je TEXT NOT NULL,
     modifita_je TEXT NOT NULL
 );
 """
 
-_CREATE_TODOJ_TIKEDOJ = """
+_CREATE_TODOJ_ETIKEDO = """
 CREATE TABLE IF NOT EXISTS todoj_etikedo (
     todo_uuid TEXT NOT NULL,
     etikedo_uuid TEXT NOT NULL,
@@ -81,43 +88,66 @@ CREATE TABLE IF NOT EXISTS todoj_etikedo (
 
 _CREATE_TAGLIBRO = """
 CREATE TABLE IF NOT EXISTS taglibro (
-    dato TEXT PRIMARY KEY,
-    teksto TEXT NOT NULL DEFAULT '',
+    uuid TEXT PRIMARY KEY,
+    titolo TEXT NOT NULL,
+    titolo_norm TEXT NOT NULL,
+    priskribo TEXT NOT NULL DEFAULT '',
+    priskribo_norm TEXT NOT NULL DEFAULT '',
+    tempo TEXT NOT NULL,
     kreita_je TEXT NOT NULL,
     modifita_je TEXT NOT NULL
 );
 """
 
-# ────────────────────────────────────────────────────────────────��─────────────
+_CREATE_TAGLIBRO_ETIKEDO = """
+CREATE TABLE IF NOT EXISTS taglibro_etikedo (
+    taglibro_uuid TEXT NOT NULL,
+    etikedo_uuid TEXT NOT NULL,
+    PRIMARY KEY (taglibro_uuid, etikedo_uuid)
+);
+"""
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Indexes
 # ──────────────────────────────────────────────────────────────────────────────
 
-_CREATE_INDEXES = """
-CREATE INDEX IF NOT EXISTS idx_eventoj_kalendaro ON eventoj(kalendaro_uuid);
-CREATE INDEX IF NOT EXISTS idx_eventoj_komenco ON eventoj(komenco);
-CREATE INDEX IF NOT EXISTS idx_todoj_estado ON todoj(estado);
-CREATE INDEX IF NOT EXISTS idx_taglibro_dato ON taglibro(dato);
-"""
+_CREATE_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_eventoj_kalendaro ON eventoj(kalendaro_uuid);",
+    "CREATE INDEX IF NOT EXISTS idx_eventoj_komenco ON eventoj(komenco);",
+    "CREATE INDEX IF NOT EXISTS idx_todoj_stato ON todoj(stato);",
+    "CREATE INDEX IF NOT EXISTS idx_todoj_titolo_norm ON todoj(titolo_norm);",
+    "CREATE INDEX IF NOT EXISTS idx_todoj_priskribo_norm ON todoj(priskribo_norm);",
+    "CREATE INDEX IF NOT EXISTS idx_taglibro_tempo ON taglibro(tempo);",
+    "CREATE INDEX IF NOT EXISTS idx_taglibro_titolo_norm ON taglibro(titolo_norm);",
+    "CREATE INDEX IF NOT EXISTS idx_taglibro_priskribo_norm ON taglibro(priskribo_norm);",
+    "CREATE INDEX IF NOT EXISTS idx_etikedoj_teksto_norm ON etikedoj(teksto_norm);",
+]
 
 
 def ensure_dirs() -> None:
     """Ensure data directory exists."""
-    _ensure_dirs(_DATA_DIR)
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def get_db(path: Path = _DATA_DIR / "organizi.db") -> SQLiteDB:
-    """Get database connection."""
+def get_db() -> SQLiteDB:
+    """Get database connection with all tables and indexes created."""
     ensure_dirs()
-    db = SQLiteDB(path)
-    
+    db = SQLiteDB(_DB_FILE)
+
     stmts = [
-        _CREATE_KALENDAROJ, _CREATE_EVENTOJ,
-        _CREATE_TODOJ, _CREATE_TIKEDOJ, _CREATE_TODOJ_TIKEDOJ,
-        _CREATE_TAGLIBRO, _CREATE_INDEXES,
+        _CREATE_KALENDAROJ,
+        _CREATE_EVENTOJ,
+        _CREATE_TODOJ,
+        _CREATE_ETIKEDOJ,
+        _CREATE_TODOJ_ETIKEDO,
+        _CREATE_TAGLIBRO,
+        _CREATE_TAGLIBRO_ETIKEDO,
     ]
     for stmt in stmts:
         db.execute(stmt)
-    
+    for stmt in _CREATE_INDEXES:
+        db.execute(stmt)
+
     return db
 
 
