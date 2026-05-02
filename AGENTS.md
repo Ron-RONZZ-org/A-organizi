@@ -120,7 +120,7 @@ PYTHONPATH=../A-core/src:src .venv/bin/python -m pytest tests/ -v
 |-------|--------|-------------|
 | #2 | ✅ Done | Storage schema + service infrastructure |
 | #3 | ✅ Done | Shared etikedoj (labels) CLI + service |
-| #4 | ⬜ Pending | taglibro CRUD + search |
+| #4 | ✅ Done | taglibro CRUD + search |
 | #5 | ⬜ Pending | todo priority formula engine + CRUD + search |
 | #6 | ⬜ Pending | kalendaro calendar management + event CRUD |
 | #7 | ⬜ Pending | kalendaro ICS import/export |
