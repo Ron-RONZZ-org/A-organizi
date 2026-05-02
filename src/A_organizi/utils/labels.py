@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import Any
 
 import typer
 from A.utils.normalize import fold_search_text
 
-_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
-
+from A_organizi.utils.markdown import (
+    normalize_markdown_links,
+    render_markdown_links_plain,
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Label blob parsing (uuid:text|uuid:text format)
@@ -26,7 +27,7 @@ def parse_label_blob(raw: str | None) -> list[tuple[str, str]]:
     Format: ``uuid1:text1|uuid2:text2``
 
     Args:
-        raw: The blob string (e.g. from GROUP_CONCAT)
+        raw: The blob string (e.g. from GROUP_CONCAT).
 
     Returns:
         List of (uuid, text) tuples.
@@ -59,95 +60,6 @@ def render_label_pairs(pairs: list[tuple[str, str]]) -> str:
         if text:
             rendered.append(render_markdown_links_plain(text))
     return ", ".join(rendered) if rendered else "-"
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Markdown internal link helpers (ec#/vt# references)
-# ──────────────────────────────────────────────────────────────────────────────
-
-
-def normalize_markdown_links(text: str) -> str:
-    """Normalize ec#/vt# targets in markdown links to canonical form.
-
-    Args:
-        text: Raw markdown text potentially containing ``[label](ec#uuid)`` links.
-
-    Returns:
-        Text with canonicalized internal references.
-    """
-    raw_text = str(text or "")
-    if not raw_text:
-        return ""
-
-    def _replace(match: re.Match[str]) -> str:
-        label = match.group(1)
-        target = match.group(2)
-        canonical = _canonicalize_internal_ref(target)
-        return f"[{label}]({canonical})"
-
-    return _MARKDOWN_LINK_RE.sub(_replace, raw_text)
-
-
-def render_markdown_links_plain(text: str, *, show_ref: bool = False) -> str:
-    """Render markdown text with ec#/vt# links as human-readable plain text.
-
-    Args:
-        text: Markdown text with internal links.
-        show_ref: If True, append the resolved reference UUID.
-
-    Returns:
-        Plain text with links replaced by their labels or resolved titles.
-    """
-    raw_text = str(text or "")
-    if not raw_text:
-        return ""
-
-    def _replace(match: re.Match[str]) -> str:
-        return _render_internal_link_plain(
-            match.group(1).strip(),
-            match.group(2).strip(),
-            show_ref=show_ref,
-        )
-
-    return _MARKDOWN_LINK_RE.sub(_replace, raw_text)
-
-
-def _canonicalize_internal_ref(token: str) -> str:
-    """Canonicalize an ec# or vt# reference.
-
-    Currently a passthrough; in future may resolve UUID prefixes.
-    """
-    raw = str(token or "").strip()
-    lower = raw.casefold()
-    if lower.startswith("ec#") or lower.startswith("vt#"):
-        return raw
-    return raw
-
-
-def _render_internal_link_plain(
-    label: str, target: str, *, show_ref: bool
-) -> str:
-    """Render a single internal link as plain text.
-
-    Args:
-        label: Link label text.
-        target: Link target (e.g. ec#uuid).
-        show_ref: Append UUID reference.
-
-    Returns:
-        Human-readable representation.
-    """
-    token = _canonicalize_internal_ref(target)
-    lower = token.casefold()
-    if lower.startswith("ec#"):
-        ref = token[3:]
-        shown = label or f"ec#{ref[:8]}"
-        return f"{shown} (ec#{ref[:8]})" if show_ref else shown
-    if lower.startswith("vt#"):
-        ref = token[3:]
-        shown = label or f"vt#{ref[:8]}"
-        return f"{shown} (vt#{ref[:8]})" if show_ref else shown
-    return label or target
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -204,7 +116,7 @@ def search_items(
     Args:
         items: List of item dicts.
         query: Search query string.
-        text_getter: Function to extract searchable text from an item.
+        text_getter: Function to extract searchable text.
         limit: Max results.
 
     Returns:
@@ -282,7 +194,7 @@ def resolve_reference(
         items: List of all candidate items.
         reference: User-provided reference string.
         text_getter: Function to extract searchable text.
-        kind_label: Human-readable label for the item type (e.g. "etikedo").
+        kind_label: Human-readable label (e.g. "etikedo").
         allow_fuzzy: Allow fuzzy/contains matching as fallback.
         interactive: Prompt user if multiple matches found.
 
@@ -444,6 +356,7 @@ def _create_label_from_ref(db, ref: str) -> str | None:
         New label UUID, or None if creation failed.
     """
     import uuid
+    from datetime import datetime, timezone
 
     normalized = normalize_markdown_links(ref).strip()
     if not normalized:
@@ -456,8 +369,6 @@ def _create_label_from_ref(db, ref: str) -> str | None:
     if existing:
         uid = str(existing["uuid"])
     else:
-        from datetime import datetime, timezone
-
         uid = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         db.execute(
@@ -471,7 +382,7 @@ def _create_label_from_ref(db, ref: str) -> str | None:
 
 
 def etikedo_text_map(db) -> dict[str, str]:
-    """Get a mapping of label UUID → rendered text.
+    """Get a mapping of label UUID to rendered text.
 
     Args:
         db: SQLiteDB instance.
@@ -489,21 +400,23 @@ def etikedo_text_map(db) -> dict[str, str]:
 def auto_create_semantic_link_etikedoj(db, text: str) -> None:
     """Auto-create etikedo entries for semantic links [label](ec#uuid).
 
-    Scans text for markdown links targeting ec# or vt# references, and
-    creates etikedo entries for them if they don't exist yet.
+    Scans text for markdown links targeting ec# or vt# references,
+    creating etikedo entries for them if they don't exist yet.
 
     Args:
         db: SQLiteDB instance.
         text: Text to scan for markdown links.
     """
+    import re
+    import uuid
+    from datetime import datetime, timezone
+
     raw_text = str(text or "")
     if not raw_text:
         return
 
-    import uuid
-    from datetime import datetime, timezone
-
-    matches = _MARKDOWN_LINK_RE.finditer(raw_text)
+    link_re = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
+    matches = link_re.finditer(raw_text)
     for match in matches:
         label = match.group(1).strip()
         target = match.group(2).strip()
@@ -512,8 +425,7 @@ def auto_create_semantic_link_etikedoj(db, text: str) -> None:
         if not (lower_target.startswith("ec#") or lower_target.startswith("vt#")):
             continue
 
-        canonical = _canonicalize_internal_ref(target)
-        etikedo_text = f"[{label}]({canonical})" if label else canonical
+        etikedo_text = f"[{label}]({target})" if label else target
         folded = fold_search_text(etikedo_text)
 
         existing = db.execute_one(
@@ -534,8 +446,6 @@ def auto_create_semantic_link_etikedoj(db, text: str) -> None:
 __all__ = [
     "parse_label_blob",
     "render_label_pairs",
-    "normalize_markdown_links",
-    "render_markdown_links_plain",
     "fuzzy_matches",
     "search_items",
     "prompt_pick",

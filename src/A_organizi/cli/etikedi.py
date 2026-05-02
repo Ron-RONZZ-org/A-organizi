@@ -8,11 +8,8 @@ from rich.table import Table
 from A import error, info, tr_multi
 from A.utils.output import console
 from A_organizi.service import get_etikedo_service
-from A_organizi.utils.labels import (
-    list_etikedoj,
-    render_markdown_links_plain,
-    resolve_reference,
-)
+from A_organizi.utils.labels import list_etikedoj, resolve_reference
+from A_organizi.utils.markdown import render_markdown_links_plain
 
 etikedoj_app = typer.Typer(
     name="etikedo",
