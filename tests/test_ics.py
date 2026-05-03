@@ -328,6 +328,15 @@ class TestImportExportCLI:
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
+        # Mock probe to avoid network calls
+        import A_organizi.cli.kalendaro as kal_cli
+        monkeypatch.setattr(
+            kal_cli,
+            "probe_calendar_config",
+            lambda url, user, pw: {"count": "0", "description": "0"},
+        )
+        monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
+
     def test_importi(self, tmp_path):
         """Import an ICS file via CLI."""
         from typer.testing import CliRunner
@@ -335,12 +344,14 @@ class TestImportExportCLI:
 
         runner = CliRunner()
 
-        # Create a calendar
+        # Create a LOCAL calendar (no -u, no -p needed)
         cal_result = runner.invoke(
-            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u"]
+            app, ["kalendaro", "aldoni", "file:///tmp/test.ics"]
         )
         assert cal_result.exit_code == 0
         cal_id = cal_result.output.split("#")[1].split(":")[0].strip()
+
+        from A_organizi.service.kalendaro import get_evento_service
 
         # Create an ICS file
         ics_file = tmp_path / "events.ics"
@@ -369,8 +380,9 @@ class TestImportExportCLI:
 
         # Create calendar + event
         cal_result = runner.invoke(
-            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u"]
+            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"]
         )
+        assert cal_result.exit_code == 0
         cal_id = cal_result.output.split("#")[1].split(":")[0].strip()
 
         from A_organizi.service.kalendaro import get_evento_service
@@ -401,8 +413,9 @@ class TestImportExportCLI:
         runner = CliRunner()
 
         cal_result = runner.invoke(
-            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u"]
+            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"]
         )
+        assert cal_result.exit_code == 0
         cal_id = cal_result.output.split("#")[1].split(":")[0].strip()
 
         from A_organizi.service.kalendaro import get_evento_service

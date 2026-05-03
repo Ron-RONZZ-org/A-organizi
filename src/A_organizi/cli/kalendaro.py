@@ -17,6 +17,7 @@ from A_organizi.utils.ics import events_to_ics, insert_ics_events
 from A_organizi.utils.sync import (
     get_password,
     http_fetch_text,
+    probe_calendar_config,
     queue_sync,
     remote_http_url,
     set_password,
@@ -94,20 +95,23 @@ def aldoni(
         error("Kalendaro jam ekzistas kun sama URL kaj uzantnomo.")
         raise typer.Exit(1)
 
-    # Validate: if remote URL, username is required
+    # Validate: if remote URL, username + password required
     low_url = url.strip().lower()
     is_remote = low_url.startswith(("http://", "https://", "caldav://"))
     if is_remote:
         if not uzantnomo.strip():
             error("Fora kalendaro bezonas --uzantnomo.")
             raise typer.Exit(1)
-        # Validate password if provided
-        if pasvorto.strip():
-            https_url = remote_http_url(url)
-            status, _ = http_fetch_text(https_url, uzantnomo, pasvorto)
-            if status not in (200, 207, 404):
-                error(f"Ne povis aliri kalendaron (eraro {status}).")
-                raise typer.Exit(1)
+        if not pasvorto.strip():
+            error("Fora kalendaro bezonas --pasvorto.")
+            raise typer.Exit(1)
+        # Probe calendar config (validates URL + credentials)
+        try:
+            probe_info = probe_calendar_config(url, uzantnomo, pasvorto)
+            info(f"Provo: {probe_info['description']}")
+        except ValueError as exc:
+            error(f"Ne povis aliri kalendaron: {exc}")
+            raise typer.Exit(1)
 
     data = {
         "url": url.strip(),

@@ -310,10 +310,62 @@ def delete_password(calendar_uuid: str) -> None:
     keyring.delete_password(_SERVICE_NAME, calendar_uuid)
 
 
+def probe_calendar_config(
+    url: str,
+    username: str,
+    password: str,
+) -> dict[str, str]:
+    """Probe remote calendar configuration.
+
+    Validates:
+    - URL is accessible
+    - Credentials work
+    - Fetches initial event count
+
+    Args:
+        url: Calendar URL (caldav:// or https://).
+        username: Username for Basic auth.
+        password: Password for Basic auth.
+
+    Returns:
+        Dict with 'count' (event count) and 'description'.
+
+    Raises:
+        ValueError: If calendar is unreachable or credentials fail.
+    """
+    if not username.strip():
+        raise ValueError("Username is required for remote calendar.")
+    if not password.strip():
+        raise ValueError("Password is required for remote calendar.")
+
+    https_url = remote_http_url(url)
+    status, _ = http_fetch_text(https_url, username, password)
+
+    if status == 401 or status == 403:
+        raise ValueError("Invalid username or password.")
+    if status == 404:
+        raise ValueError("Calendar not found at URL.")
+    if status not in (200, 207):
+        raise ValueError(f"Cannot access calendar (HTTP {status}).")
+
+    # Try to get event count via CalDAV REPORT
+    try:
+        payloads = fetch_remote_calendar_payloads(https_url, username, password)
+        count = len(payloads)
+    except Exception:
+        count = 0
+
+    return {
+        "count": str(count),
+        "description": f"{count} evento(j) trovita(j)",
+    }
+
+
 __all__ = [
     "remote_http_url",
     "http_fetch_text",
     "fetch_remote_calendar_payloads",
+    "probe_calendar_config",
     "queue_sync",
     "sync_worker",
     "start_sync_worker",

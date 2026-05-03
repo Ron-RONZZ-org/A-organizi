@@ -234,13 +234,36 @@ class TestKalendaroCLI:
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
-    def _cal_uuid(self, runner, app, url="https://cal.ics", username="u"):
+        # Mock probe_calendar_config to avoid network calls
+        # Patch where it's IMPORTED, not where it's defined
+        import A_organizi.cli.kalendaro as kal_cli
+        monkeypatch.setattr(
+            kal_cli,
+            "probe_calendar_config",
+            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"},
+        )
+        monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
+        monkeypatch.setattr(kal_cli, "get_password", lambda uuid: "secret")
+
+    def _cal_uuid(self, runner, app, url="https://cal.ics", username="u", password="secret"):
         """Helper: add calendar and return its UUID prefix."""
         result = runner.invoke(
-            app, ["kalendaro", "aldoni", url, "-u", username]
+            app, ["kalendaro", "aldoni", url, "-u", username, "-p", password]
         )
-        assert result.exit_code == 0
+        # Debug: print output if failed
+        if result.exit_code != 0:
+            print(f"FAIL: {result.output}", file=sys.stderr)
+        assert result.exit_code == 0, result.output
         # Extract UUID from "Aldonis kalendaron #abc123: ..."
+        # Output format: "...#16d92dc5 kun pasvorto.\n...#16d92dc5: https://..."
+        for line in result.output.split("\n"):
+            if line.startswith("Aldonis kalendaron #") and "kun pasvorto" not in line:
+                return line.split("#")[1].split(":")[0].strip()
+        # Fallback: find any line with #
+        import re
+        match = re.search(r"#([a-f0-9]{8})", result.output)
+        if match:
+            return match.group(1)
         return result.output.split("#")[1].split(":")[0].strip()
 
     def test_aldoni(self):
@@ -249,7 +272,7 @@ class TestKalendaroCLI:
 
         runner = CliRunner()
         result = runner.invoke(
-            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "alice"]
+            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "alice", "-p", "secret"]
         )
         assert result.exit_code == 0, result.output
         assert "Aldonis kalendaron" in result.output
@@ -259,9 +282,9 @@ class TestKalendaroCLI:
         from A_organizi.cli import app
 
         runner = CliRunner()
-        runner.invoke(app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u"])
+        runner.invoke(app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"])
         result = runner.invoke(
-            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u"]
+            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"]
         )
         assert result.exit_code != 0
 
@@ -270,7 +293,7 @@ class TestKalendaroCLI:
         from A_organizi.cli import app
 
         runner = CliRunner()
-        runner.invoke(app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u"])
+        runner.invoke(app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"])
         result = runner.invoke(app, ["kalendaro", "ls-kalendaroj"])
         assert result.exit_code == 0, result.output
         assert "cal.ics" in result.output
