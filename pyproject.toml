@@ -19,7 +19,6 @@ dev = [
 ]
 
 [project.entry-points."A.commands"]
-organizi = "A_organizi.cli:app"
 kalendaro = "A_organizi.cli.kalendaro:kalendaro_app"
 todo = "A_organizi.cli.todo:todo_app"
 taglibro = "A_organizi.cli.taglibro:taglibro_app"
