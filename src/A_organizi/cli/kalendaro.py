@@ -14,7 +14,14 @@ from A.utils.output import console
 
 from A_organizi.service.kalendaro import get_evento_service, get_kalendaro_service
 from A_organizi.utils.ics import events_to_ics, insert_ics_events
-from A_organizi.utils.sync import queue_sync, start_sync_worker
+from A_organizi.utils.sync import (
+    get_password,
+    http_fetch_text,
+    queue_sync,
+    remote_http_url,
+    set_password,
+    start_sync_worker,
+)
 from A_organizi.utils.undo import apply_undo, list_undos
 
 kalendaro_app = typer.Typer(
@@ -74,6 +81,12 @@ def aldoni(
         "--uzantnomo",
         help="Uzantnomo por fora kalendaro. Ekz: -u alice",
     ),
+    pasvorto: str = typer.Option(
+        "",
+        "-p",
+        "--pasvorto",
+        help="Pasvorto por fora kalendaro. Ekz: -p secret123",
+    ),
 ) -> None:
     """Aldoni kalendaron (loka ICS aŭ fora CalDAV)."""
     svc = get_kalendaro_service()
@@ -84,9 +97,17 @@ def aldoni(
     # Validate: if remote URL, username is required
     low_url = url.strip().lower()
     is_remote = low_url.startswith(("http://", "https://", "caldav://"))
-    if is_remote and not uzantnomo.strip():
-        error("Fora kalendaro bezonas --uzantnomo.")
-        raise typer.Exit(1)
+    if is_remote:
+        if not uzantnomo.strip():
+            error("Fora kalendaro bezonas --uzantnomo.")
+            raise typer.Exit(1)
+        # Validate password if provided
+        if pasvorto.strip():
+            https_url = remote_http_url(url)
+            status, _ = http_fetch_text(https_url, uzantnomo, pasvorto)
+            if status not in (200, 207, 404):
+                error(f"Ne povis aliri kalendaron (eraro {status}).")
+                raise typer.Exit(1)
 
     data = {
         "url": url.strip(),
@@ -94,6 +115,15 @@ def aldoni(
         "remote": 1 if is_remote else 0,
     }
     result = svc.create(data)
+
+    # Store password in keyring for remote calendars
+    if is_remote and pasvorto.strip():
+        try:
+            set_password(result["uuid"], pasvorto.strip())
+            info(f"Aldonis kalendaron #{result['uuid'][:8]} kun pasvorto.")
+        except Exception as exc:
+            error(f"Kalendaro kreita, sed pasvorto ne stokita: {exc}")
+
     info(f"Aldonis kalendaron #{result['uuid'][:8]}: {url.strip()}")
 
 
@@ -133,10 +163,16 @@ def modifi(
         "--uzantnomo",
         help="Nova uzantnomo. Ekz: -u bob",
     ),
+    pasvorto: str | None = typer.Option(
+        None,
+        "-p",
+        "--pasvorto",
+        help="Nova pasvorto (malplena por forigi). Ekz: -p secret123",
+    ),
 ) -> None:
     """Modifi kalendaran agordon laŭ UUID."""
-    if url is None and uzantnomo is None:
-        error("Uzu almenaŭ --url aŭ --uzantnomo.")
+    if url is None and uzantnomo is None and pasvorto is None:
+        error("Uzu almenaŭ --url, --uzantnomo aŭ --pasvorto.")
         raise typer.Exit(1)
 
     svc = get_kalendaro_service()
@@ -145,13 +181,52 @@ def modifi(
         error(f"Kalendaro ne trovita: {kalendaro_uuid}")
         raise typer.Exit(1)
 
+    # Get current calendar data
+    cal = svc.get(resolved)
+    if not cal:
+        error(f"Kalendaro ne trovita: {kalendaro_uuid}")
+        raise typer.Exit(1)
+
     update: dict[str, str] = {}
+    
+    # Validate new URL if provided
     if url is not None:
+        low_url = url.strip().lower()
+        is_remote = low_url.startswith(("http://", "https://", "caldav://"))
+        new_username = uzantnomo.strip() if uzantnomo else cal.get("username", "")
+        
+        # Validate password if changing remote settings
+        if is_remote and pasvorto:
+            https_url = remote_http_url(url)
+            status, _ = http_fetch_text(https_url, new_username, pasvorto)
+            if status not in (200, 207, 404):
+                error(f"Ne povis aliri kalendaron (eraro {status}).")
+                raise typer.Exit(1)
+        
         update["url"] = url.strip()
+        update["remote"] = "1" if is_remote else str(cal.get("remote", 0))
+    
     if uzantnomo is not None:
         update["username"] = uzantnomo.strip()
 
     svc.update(resolved, update)
+
+    # Handle password changes
+    if pasvorto is not None:
+        if pasvorto.strip():
+            try:
+                set_password(resolved, pasvorto.strip())
+                info(f"Ŝanĝis pasvorton por #{resolved[:8]}.")
+            except Exception as exc:
+                error(f"Pasvorto ne stokita: {exc}")
+        else:
+            try:
+                from A_organizi.utils.sync import delete_password
+                delete_password(resolved)
+                info(f" Forigis pasvorton por #{resolved[:8]}.")
+            except Exception as exc:
+                error(f"Pasvorto ne forigita: {exc}")
+
     info(f"Modifis kalendaron #{resolved[:8]}.")
 
 
