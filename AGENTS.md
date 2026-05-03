@@ -129,6 +129,8 @@ PYTHONPATH=../A-core/src:src .venv/bin/python -m pytest tests/ -v
 | #6 | ✅ Done | kalendaro calendar management + event CRUD |
 | #7 | ✅ Done | kalendaro ICS import/export |
 | #8 | ✅ Done | kalendaro CalDAV sync + undo |
+| #9 | ✅ Done | kalendaro --pasvorto option |
+| #10 | ✅ Done | kalendaro probe_calendar_config validation |
 ## Branch Convention
 
 All A-* repos use `main` as the primary branch. Use `main` for all development.
