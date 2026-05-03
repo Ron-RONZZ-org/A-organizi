@@ -408,7 +408,7 @@ def serci(
 @kalendaro_app.command()
 def forigi(
     eventoj: list[str] = typer.Argument(
-        ..., help="Evento UUID(j) por forigi."
+        ..., help=tr_multi("Evento UUID(j) por forigi.", "Evento UUID(j) forigi.", "UUID de l'événement à supprimer.")
     ),
 ) -> None:
     """Forigi eventojn laŭ UUID."""
@@ -519,13 +519,13 @@ def importi(
 @kalendaro_app.command()
 def eksporti(
     argumentoj: list[str] = typer.Argument(
-        None, help="Evento UUID(j) aŭ opciaj limdatoj (YYYYMMDD/MMDD/DD)."
+        None, help=tr_multi("Evento UUID(j) aŭ opciaj limdatoj (YYYYMMDD/MMDD/DD).", "Evento UUID(j) aŭ opciaj limdatoj (YYYYMMDD/MMDD/DD).", "UUID de l'événement ou dates limites optionnelles (YYYYMMDD/MMDD/DD).")
     ),
     kalendaro: list[str] | None = typer.Option(
         None, "-k", "--kalendaro", help="Kalendaro UUID(j) por intervala eksporto."
     ),
     dosiero: str | None = typer.Option(
-        None, "-d", "--dosiero", help="Cela .ics dosiero."
+        None, "-d", "--dosiero", help=tr_multi("Cela .ics dosiero.", "Cela .ics dosiero.", "Fichier .ics de destination.")
     ),
 ) -> None:
     """Eksporti eventojn laŭ UUID aŭ laŭ kalendaro+datoj."""
@@ -623,7 +623,7 @@ def sinkronigi(
 @kalendaro_app.command()
 def malfari(
     argumentoj: list[str] = typer.Argument(
-        ..., help="'ls' aŭ ŝanĝo-ID(j)."
+        ..., help=tr_multi("'ls' aŭ ŝanĝo-ID(j).", "'ls' aŭ ŝanĝo-ID(j).", "'ls' ou ID de changement.")
     ),
 ) -> None:
     """Montri aŭ apliki malfarojn."""
