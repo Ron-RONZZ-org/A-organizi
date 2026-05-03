@@ -41,13 +41,15 @@ src/A_organizi/
 │   ├── etikedi.py    # etikedoj (labels) commands
 │   ├── todo.py       # todo commands (future)
 │   ├── taglibro.py   # taglibro commands (future)
-│   └── kalendaro.py  # kalendaro commands (future)
+│   └── kalendaro.py  # kalendaro commands + sync/undo
 ├── utils/
 │   ├── __init__.py
-│   └── labels.py     # Shared label helpers (resolve_refs, parse_blob, etc.)
-├── service.py        # Business logic (CRUDService singletons)
-└── data/
-    └── storage.py    # SQLite (uses A.data.base)
+│   ├── labels.py     # Shared label helpers (resolve_refs, parse_blob, etc.)
+│   ├── sync.py      # CalDAV client, sync queue, password management
+│   └── undo.py      # Calendar/event undo operations
+├── service.kalendaro.py  # Calendar + event CRUD services
+├── data/
+│   └── storage.py    # SQLite (uses A.data.base)
 ```
 
 ## Database Schema
@@ -63,6 +65,8 @@ src/A_organizi/
 | `todoj_etikedo` | `(todo_uuid, etikedo_uuid)` | — | Task-label junction |
 | `taglibro` | `uuid` | `titolo`, `titolo_norm`, `tempo` | Journal entries (multiple per day) |
 | `taglibro_etikedo` | `(taglibro_uuid, etikedo_uuid)` | — | Journal-label junction |
+| `sync_queue` | `id` | `calendar_uuid`, `operacio`, `stato` | CalDAV sync jobs |
+| `undo_changes` | `id` | `operacio`, `payload` | Undo history |
 
 ### Key Design Decisions
 
@@ -124,7 +128,7 @@ PYTHONPATH=../A-core/src:src .venv/bin/python -m pytest tests/ -v
 | #5 | ✅ Done | todo priority formula engine + CRUD + search |
 | #6 | ✅ Done | kalendaro calendar management + event CRUD |
 | #7 | ✅ Done | kalendaro ICS import/export |
-| #8 | ⬜ Pending | kalendaro CalDAV sync + undo |
+| #8 | ✅ Done | kalendaro CalDAV sync + undo |
 ## Branch Convention
 
 All A-* repos use `main` as the primary branch. Use `main` for all development.
