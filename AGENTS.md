@@ -131,6 +131,34 @@ PYTHONPATH=../A-core/src:src .venv/bin/python -m pytest tests/ -v
 | #8 | ✅ Done | kalendaro CalDAV sync + undo |
 | #9 | ✅ Done | kalendaro --pasvorto option |
 | #10 | ✅ Done | kalendaro probe_calendar_config validation |
-## Branch Convention
 
+## Migration from autish
+
+A-organizi supports migration from autish kalendaro.db and tasklibro.db:
+
+| Legacy | Target | Description |
+|--------|--------|-------------|
+| kalendaro.db → calendars | A-organizi → kalendaroj | Calendars |
+| kalendaro.db → events | A-organizi → eventoj | Calendar events (146) |
+| tasklibro.db → todo | A-organizi → todoj | Tasks (1) |
+| tasklibro.db → taglibro | A-organizi → taglibro | Journal entries |
+| tasklibro.db → etikedo | A-organizi → etikedoj | Labels |
+
+**CLI:**
+```bash
+A migri           # Run migrations
+```
+
+**Programmatic:**
+```python
+from A_organizi.data.migrate_from_autish import migrate
+result = migrate()
+```
+
+Features:
+- Normalizes text for search (titolo_norm, priskribo_norm)
+- Preserves timestamps
+- Idempotent
+
+## Branch Convention
 All A-* repos use `main` as the primary branch. Use `main` for all development.

@@ -58,6 +58,22 @@ A-organizi is a plugin for the [A](https://github.com/Ron-RONZZ-org/A-core/) fra
 
 See the [A-core documentation](https://github.com/Ron-RONZZ-org/A-core/) for more on the framework.
 
+## Migration from autish
+
+A-organizi supports migration from autish:
+
+```bash
+A migri           # Run migrations (imports calendar, tasks, journal)
+```
+
+| Legacy | Target | Description |
+|--------|--------|-------------|
+| kalendaro.db → calendars | A-organizi → kalendaroj | Calendars |
+| kalendaro.db → events | A-organizi → eventoj | Calendar events (146) |
+| tasklibro.db → todo | A-organizi → todoj | Tasks |
+| tasklibro.db → taglibro | A-organizi → taglibro | Journal |
+| tasklibro.db → etikedo | A-organizi → etikedoj | Labels |
+
 ## History
 
 A-organizi combines [autish kalendaro](https://github.com/Ron-RONZZ-org/autish/), [autish todo](https://github.com/Ron-RONZZ-org/autish/), and [autish taglibro](https://github.com/Ron-RONZZ-org/autish/) into one plugin.
