@@ -14,6 +14,8 @@ from A.utils.output import console
 
 from A_organizi.service.kalendaro import get_evento_service, get_kalendaro_service
 from A_organizi.utils.ics import events_to_ics, insert_ics_events
+from A_organizi.utils.sync import queue_sync, start_sync_worker
+from A_organizi.utils.undo import apply_undo, list_undos
 
 kalendaro_app = typer.Typer(
     name="kalendaro",
@@ -495,6 +497,84 @@ def eksporti(
         info(f"Eksportis {len(rows)} evento(j)n al {dosiero}")
     else:
         typer.echo(payload.rstrip("\n"))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Sync commands (CalDAV)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@kalendaro_app.command()
+def sinkronigi(
+    kalendaroj: list[str] | None = typer.Argument(
+        None, help="Kalendaro UUID(j) por sinkronigi."
+    ),
+) -> None:
+    """Sinkronigi kalendarojn kun fora servilo."""
+    cal_svc = get_kalendaro_service()
+    cal_uuids: list[str] = []
+
+    if kalendaroj:
+        for ref in kalendaroj:
+            uid = cal_svc.resolve_uuid(ref)
+            if uid:
+                cal_uuids.append(uid)
+    else:
+        # Default: all calendars
+        rows = cal_svc.list()
+        cal_uuids = [str(r["uuid"]) for r in rows if r.get("remote") == 1]
+
+    if not cal_uuids:
+        error("Neniu fora kalendaro por sinkronigi.")
+        return
+
+    db = get_evento_service().db
+    start_sync_worker()
+
+    for cal_uuid in cal_uuids:
+        queue_sync(db, cal_uuid, "pull", {})
+        info(f"Sinkronigis kalendaron #{cal_uuid[:8]}.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Undo commands (malfari)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@kalendaro_app.command()
+def malfari(
+    argumentoj: list[str] = typer.Argument(
+        ..., help="'ls' aŭ ŝanĝo-ID(j)."
+    ),
+) -> None:
+    """Montri aŭ apliki malfarojn."""
+    db = get_evento_service().db
+
+    if argumentoj and argumentoj[0] == "ls":
+        # List undo operations
+        rows = list_undos(db)
+        if not rows:
+            info("Neniu malfaro.")
+            return
+
+        table = Table(header_style="dim", border_style="dim")
+        table.add_column("ID", style="cyan", width=10)
+        table.add_column("Operacio", width=20)
+        table.add_column("Dato", width=20)
+        for row in rows:
+            table.add_row(
+                row["id"][:8],
+                row["operacio"],
+                row["kreita_je"][:19],
+            )
+        console.print(table)
+    else:
+        # Apply undo
+        for change_id in argumentoj:
+            if apply_undo(db, change_id):
+                info(f"Aplikis malfaron #{change_id[:8]}.")
+            else:
+                error(f"Malfaro ne trovita: #{change_id[:8]}")
 
 
 __all__ = ["kalendaro_app"]

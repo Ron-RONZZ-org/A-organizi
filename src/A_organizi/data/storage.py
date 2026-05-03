@@ -108,6 +108,32 @@ CREATE TABLE IF NOT EXISTS taglibro_etikedo (
 """
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Sync queue (CalDAV sync)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_CREATE_SYNC_QUEUE = """
+CREATE TABLE IF NOT EXISTS sync_queue (
+    id TEXT PRIMARY KEY,
+    calendar_uuid TEXT NOT NULL,
+    operacio TEXT NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}',
+    stato TEXT NOT NULL DEFAULT 'pending',
+    eraro TEXT NOT NULL DEFAULT '',
+    kreita_je TEXT NOT NULL,
+    modifita_je TEXT NOT NULL
+);
+"""
+
+_CREATE_UNDO_CHANGES = """
+CREATE TABLE IF NOT EXISTS undo_changes (
+    id TEXT PRIMARY KEY,
+    operacio TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    kreita_je TEXT NOT NULL
+);
+"""
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Indexes
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -119,6 +145,8 @@ _CREATE_STMTS = [
     _CREATE_TODOJ_ETIKEDO,
     _CREATE_TAGLIBRO,
     _CREATE_TAGLIBRO_ETIKEDO,
+    _CREATE_SYNC_QUEUE,
+    _CREATE_UNDO_CHANGES,
 ]
 
 _CREATE_INDEXES = [
@@ -157,4 +185,6 @@ __all__ = [
     "get_db",
     "_CREATE_STMTS",
     "_CREATE_INDEXES",
+    "_CREATE_SYNC_QUEUE",
+    "_CREATE_UNDO_CHANGES",
 ]
