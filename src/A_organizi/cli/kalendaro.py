@@ -6,11 +6,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 import typer
-from rich.table import Table
 
 from A import error, info, tr_multi
 from A.utils.date import parse_partial_date, parse_partial_datetime
-from A.utils.output import console
+from A.utils.output import console, print_table
 
 from A_organizi.service.kalendaro import get_evento_service, get_kalendaro_service
 from A_organizi.utils.ics import events_to_ics, insert_ics_events
@@ -139,15 +138,22 @@ def ls_kalendaroj() -> None:
     if not rows:
         info("Neniu kalendaro.")
         return
-    table = Table(header_style="dim", border_style="dim")
-    table.add_column("UUID", style="cyan", width=10)
-    table.add_column("URL")
-    for row in rows:
-        table.add_row(
-            str(row["uuid"])[:8],
-            _short(str(row.get("url") or ""), 60),
-        )
-    console.print(table)
+
+    # Pre-process rows for table display
+    processed = [
+        {
+            "uuid": str(row["uuid"])[:8],
+            "url": _short(str(row.get("url") or ""), 60),
+        }
+        for row in rows
+    ]
+
+    columns = [
+        {"header": "UUID", "key": "uuid", "style": "cyan", "width": 10},
+        {"header": "URL", "key": "url"},
+    ]
+
+    print_table(columns, processed, title=tr_multi("Kalendaroj", "Calendars", "Calendriers"))
 
 
 @kalendaro_app.command()

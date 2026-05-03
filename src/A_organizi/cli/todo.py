@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import typer
-from rich.table import Table
 
 from A import error, info, tr_multi
-from A.utils.output import console
+from A.utils.output import console, print_table
 from A.utils.normalize import fold_search_text
 
 from A_organizi.priority import (
@@ -36,13 +35,9 @@ todo_app = typer.Typer(
 
 
 def _print_results(items: list[dict]) -> None:
-    """Print tasks in a Rich table."""
-    table = Table(show_header=True, header_style="bold", box=None)
-    table.add_column("UUID", style="cyan", no_wrap=True)
-    table.add_column("TITOLO")
-    table.add_column("PRIORITATO", justify="right", no_wrap=True)
-    table.add_column("STATO", no_wrap=True)
-    table.add_column("ETIKEDOJ")
+    """Print tasks using A-core generic table utility."""
+    # Pre-process data for table display
+    rows = []
     for item in items:
         priority = format_priority(
             str(item.get("prioritato") or "0"),
@@ -51,14 +46,23 @@ def _print_results(items: list[dict]) -> None:
         etikedoj = ", ".join(
             render_text(text) for _, text in (item.get("etikedoj") or []) if text
         ) or "-"
-        table.add_row(
-            f"#{str(item.get('uuid') or '')[:8]}",
-            render_text(str(item.get("titolo") or "")),
-            priority,
-            str(item.get("stato") or ""),
-            etikedoj,
-        )
-    console.print(table)
+        rows.append({
+            "uuid": f"#{str(item.get('uuid') or '')[:8]}",
+            "titolo": render_text(str(item.get("titolo") or "")),
+            "prioritato": priority,
+            "stato": str(item.get("stato") or ""),
+            "etikedoj": etikedoj,
+        })
+
+    columns = [
+        {"header": "UUID", "key": "uuid", "style": "cyan", "no_wrap": True},
+        {"header": "TITOLO", "key": "titolo"},
+        {"header": "PRIORITATO", "key": "prioritato", "no_wrap": True},
+        {"header": "STATO", "key": "stato", "no_wrap": True},
+        {"header": "ETIKEDOJ", "key": "etikedoj"},
+    ]
+
+    print_table(columns, rows, title=tr_multi("Todoj", "Tasks", "Tâches"))
 
 
 def _show_detail(item: dict) -> None:
