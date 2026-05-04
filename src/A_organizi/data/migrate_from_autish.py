@@ -44,17 +44,31 @@ def migrate() -> dict:
         legacy = sqlite3.connect(str(_KALENDARO_DB))
         legacy.row_factory = sqlite3.Row
         
+        # Get existing UUIDs for idempotency
+        existing_calendars = {
+            r[0] for r in target.execute("SELECT uuid FROM kalendaroj").fetchall()
+        }
+        existing_events = {
+            r[0] for r in target.execute("SELECT uuid FROM eventoj").fetchall()
+        }
+        
         rows = legacy.execute("SELECT * FROM calendars").fetchall()
         results["calendars"]["source"] = len(rows)
         
         for row in rows:
+            uuid = row["uuid"]
+            # Skip if already exists (idempotent)
+            if uuid in existing_calendars:
+                results["calendars"]["migrated"] += 1  # count as "migrated" (already there)
+                continue
+            
             try:
                 target.execute(
                     """INSERT INTO kalendaroj (
                         uuid, url, username, remote, kreita_je, modifita_je
                     ) VALUES (?, ?, ?, ?, ?, ?)""",
                     (
-                        row["uuid"],
+                        uuid,
                         row["url"],
                         row["username"],
                         row["remote"],
@@ -63,8 +77,9 @@ def migrate() -> dict:
                     ),
                 )
                 results["calendars"]["migrated"] += 1
+                existing_calendars.add(uuid)  # prevent duplicates in same run
             except Exception as e:
-                results["calendars"]["errors"].append(f"{row['uuid']}: {e}")
+                results["calendars"]["errors"].append(f"{uuid}: {e}")
         
         # Migrate keyring passwords for each calendar
         for row in legacy.execute("SELECT uuid FROM calendars").fetchall():
@@ -76,6 +91,12 @@ def migrate() -> dict:
         results["events"]["source"] = len(rows)
         
         for row in rows:
+            uuid = row["uuid"]
+            # Skip if already exists (idempotent)
+            if uuid in existing_events:
+                results["events"]["migrated"] += 1
+                continue
+            
             try:
                 partoprenantoj = _parse_json_field(row, "partoprenantoj")
                 target.execute(
@@ -85,7 +106,7 @@ def migrate() -> dict:
                         kreita_je, modifita_je
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        row["uuid"],
+                        uuid,
                         row["calendar_uuid"],
                         row["titolo"],
                         row["komenco"],
@@ -100,8 +121,9 @@ def migrate() -> dict:
                     ),
                 )
                 results["events"]["migrated"] += 1
+                existing_events.add(uuid)
             except Exception as e:
-                results["events"]["errors"].append(f"{row['uuid']}: {e}")
+                results["events"]["errors"].append(f"{uuid}: {e}")
         
         legacy.close()
     
@@ -114,9 +136,16 @@ def migrate() -> dict:
         rows = legacy.execute("SELECT * FROM etikedo").fetchall()
         results["labels"]["source"] = len(rows)
         
+        # Get existing for idempotency
+        existing_labels = {r[0] for r in target.execute("SELECT uuid FROM etikedoj").fetchall()}
+        
         for row in rows:
+            uuid = row["uuid"]
+            if uuid in existing_labels:
+                results["labels"]["migrated"] += 1
+                continue
+            
             try:
-                # Normalize text for search
                 tekst = row["teksto"]
                 teksto_norm = tekst.lower().strip() if tekst else ""
                 
@@ -125,7 +154,7 @@ def migrate() -> dict:
                         uuid, teksto, teksto_norm, koloro, kreita_je, modifita_je
                     ) VALUES (?, ?, ?, ?, ?, ?)""",
                     (
-                        row["uuid"],
+                        uuid,
                         tekst,
                         teksto_norm,
                         row.get("koloro", ""),
@@ -134,14 +163,22 @@ def migrate() -> dict:
                     ),
                 )
                 results["labels"]["migrated"] += 1
+                existing_labels.add(uuid)
             except Exception as e:
-                results["labels"]["errors"].append(f"{row['uuid']}: {e}")
+                results["labels"]["errors"].append(f"{uuid}: {e}")
         
         # Migrate tasks
         rows = legacy.execute("SELECT * FROM todo").fetchall()
         results["tasks"]["source"] = len(rows)
         
+        existing_tasks = {r[0] for r in target.execute("SELECT uuid FROM todoj").fetchall()}
+        
         for row in rows:
+            uuid = row["uuid"]
+            if uuid in existing_tasks:
+                results["tasks"]["migrated"] += 1
+                continue
+            
             try:
                 titolo_norm = row["titolo"].lower().strip() if row["titolo"] else ""
                 priskribo_norm = row["priskribo"].lower().strip() if row["priskribo"] else ""
@@ -152,7 +189,7 @@ def migrate() -> dict:
                         prioritato, stato, kreita_je, modifita_je
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        row["uuid"],
+                        uuid,
                         row["titolo"],
                         titolo_norm,
                         row["priskribo"],
@@ -164,14 +201,22 @@ def migrate() -> dict:
                     ),
                 )
                 results["tasks"]["migrated"] += 1
+                existing_tasks.add(uuid)
             except Exception as e:
-                results["tasks"]["errors"].append(f"{row['uuid']}: {e}")
+                results["tasks"]["errors"].append(f"{uuid}: {e}")
         
         # Migrate journal entries
         rows = legacy.execute("SELECT * FROM taglibro").fetchall()
         results["journal"]["source"] = len(rows)
         
+        existing_journal = {r[0] for r in target.execute("SELECT uuid FROM taglibro").fetchall()}
+        
         for row in rows:
+            uuid = row["uuid"]
+            if uuid in existing_journal:
+                results["journal"]["migrated"] += 1
+                continue
+            
             try:
                 titolo_norm = row["titolo"].lower().strip() if row["titolo"] else ""
                 priskribo_norm = row["priskribo"].lower().strip() if row["priskribo"] else ""
@@ -180,9 +225,9 @@ def migrate() -> dict:
                     """INSERT INTO taglibro (
                         uuid, titolo, titolo_norm, priskribo, priskribo_norm,
                         tempo, kreita_je, modifita_je
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        row["uuid"],
+                        uuid,
                         row["titolo"],
                         titolo_norm,
                         row["priskribo"],
@@ -193,8 +238,9 @@ def migrate() -> dict:
                     ),
                 )
                 results["journal"]["migrated"] += 1
+                existing_journal.add(uuid)
             except Exception as e:
-                results["journal"]["errors"].append(f"{row['uuid']}: {e}")
+                results["journal"]["errors"].append(f"{uuid}: {e}")
         
         legacy.close()
     
