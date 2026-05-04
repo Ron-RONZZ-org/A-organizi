@@ -157,7 +157,7 @@ def migrate() -> dict:
                         uuid,
                         tekst,
                         teksto_norm,
-                        row.get("koloro", ""),
+                        "",  # Legacy has no koloro
                         now,
                         now,
                     ),
