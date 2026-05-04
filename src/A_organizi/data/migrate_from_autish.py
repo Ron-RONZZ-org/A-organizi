@@ -29,7 +29,7 @@ def migrate() -> dict:
         Dict with migration results
     """
     results = {
-        "calendars": {"source": 0, "migrated": 0, "errors": []},
+        "calendars": {"source": 0, "migrated": 0, "keyring_migrated": 0, "errors": []},
         "events": {"source": 0, "migrated": 0, "errors": []},
         "tasks": {"source": 0, "migrated": 0, "errors": []},
         "journal": {"source": 0, "migrated": 0, "errors": []},
@@ -65,6 +65,11 @@ def migrate() -> dict:
                 results["calendars"]["migrated"] += 1
             except Exception as e:
                 results["calendars"]["errors"].append(f"{row['uuid']}: {e}")
+        
+        # Migrate keyring passwords for each calendar
+        for row in legacy.execute("SELECT uuid FROM calendars").fetchall():
+            if _migrate_calendar_keyring(row["uuid"]):
+                results["calendars"]["keyring_migrated"] += 1
         
         # Migrate events
         rows = legacy.execute("SELECT * FROM events").fetchall()
@@ -205,6 +210,40 @@ def _parse_json_field(row: sqlite3.Row, field: str) -> list | dict:
         except (json.JSONDecodeError, TypeError):
             pass
     return []
+
+
+def _migrate_calendar_keyring(calendar_uuid: str) -> bool:
+    """Migrate calendar password from autish keyring to A-organizi.
+    
+    autish uses: keyring.get_password("autish.kalendaro", calendar_uuid)
+    A-organizi uses: keyring.get_password("A.kalendaro", calendar_uuid)
+    
+    Returns:
+        True if password was migrated
+    """
+    try:
+        import keyring
+    except ImportError:
+        return False
+    
+    try:
+        # Try to get old password
+        old_password = keyring.get_password("autish.kalendaro", calendar_uuid)
+        if not old_password:
+            return False
+        
+        # Store with new service name
+        keyring.set_password("A.kalendaro", calendar_uuid, old_password)
+        
+        # Delete old entry (ignore errors - may not exist)
+        try:
+            keyring.delete_password("autish.kalendaro", calendar_uuid)
+        except Exception:
+            pass
+        
+        return True
+    except Exception:
+        return False
 
 
 __all__ = ["migrate"]
