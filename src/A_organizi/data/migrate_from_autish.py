@@ -46,10 +46,10 @@ def migrate() -> dict:
         
         # Get existing UUIDs for idempotency
         existing_calendars = {
-            r[0] for r in target.execute("SELECT uuid FROM kalendaroj").fetchall()
+            r["uuid"] for r in target.execute("SELECT uuid FROM kalendaroj")
         }
         existing_events = {
-            r[0] for r in target.execute("SELECT uuid FROM eventoj").fetchall()
+            r["uuid"] for r in target.execute("SELECT uuid FROM eventoj")
         }
         
         rows = legacy.execute("SELECT * FROM calendars").fetchall()
@@ -137,7 +137,7 @@ def migrate() -> dict:
         results["labels"]["source"] = len(rows)
         
         # Get existing for idempotency
-        existing_labels = {r[0] for r in target.execute("SELECT uuid FROM etikedoj").fetchall()}
+        existing_labels = {r["uuid"] for r in target.execute("SELECT uuid FROM etikedoj")}
         
         for row in rows:
             uuid = row["uuid"]
@@ -171,7 +171,7 @@ def migrate() -> dict:
         rows = legacy.execute("SELECT * FROM todo").fetchall()
         results["tasks"]["source"] = len(rows)
         
-        existing_tasks = {r[0] for r in target.execute("SELECT uuid FROM todoj").fetchall()}
+        existing_tasks = {r["uuid"] for r in target.execute("SELECT uuid FROM todoj")}
         
         for row in rows:
             uuid = row["uuid"]
@@ -209,7 +209,7 @@ def migrate() -> dict:
         rows = legacy.execute("SELECT * FROM taglibro").fetchall()
         results["journal"]["source"] = len(rows)
         
-        existing_journal = {r[0] for r in target.execute("SELECT uuid FROM taglibro").fetchall()}
+        existing_journal = {r["uuid"] for r in target.execute("SELECT uuid FROM taglibro")}
         
         for row in rows:
             uuid = row["uuid"]
