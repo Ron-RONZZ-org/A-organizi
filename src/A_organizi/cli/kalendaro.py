@@ -7,7 +7,7 @@ from pathlib import Path
 
 import typer
 
-from A import error, info, tr_multi
+from A import error, info, tr_multi, tr_multi
 from A.utils.date import parse_partial_date, parse_partial_datetime
 from A.utils.output import console, print_table
 
@@ -73,19 +73,19 @@ def _short(text: str, limit: int = 40) -> str:
 def aldoni(
     url: str = typer.Argument(
         ...,
-        help="URL de kalendaro. Ekz: https://example.com/cal.ics",
+        help=tr_multi("URL de kalendaro. Ekz: https://example.com/cal.ics", "Calendar URL. E.g. https://example.com/cal.ics", "URL du calendrier. Ex: https://example.com/cal.ics"),
     ),
     uzantnomo: str = typer.Option(
         "",
         "-u",
         "--uzantnomo",
-        help="Uzantnomo por fora kalendaro. Ekz: -u alice",
+        help=tr_multi("Uzantnomo por fora kalendaro. Ekz: -u alice", "Username for remote calendar. E.g. -u alice", "Nom d'utilisateur pour calendrier distant. Ex: -u alice"),
     ),
     pasvorto: str = typer.Option(
         "",
         "-p",
         "--pasvorto",
-        help="Pasvorto por fora kalendaro. Ekz: -p secret123",
+        help=tr_multi("Pasvorto por fora kalendaro. Ekz: -p secret123", "Password for remote calendar. E.g. -p secret123", "Mot de passe pour calendrier distant. Ex: -p secret123"),
     ),
 ) -> None:
     """Aldoni kalendaron (loka ICS aŭ fora CalDAV)."""
@@ -160,24 +160,24 @@ def ls_kalendaroj() -> None:
 def modifi(
     kalendaro_uuid: str = typer.Argument(
         ...,
-        help="UUID de kalendaro. Ekz: abcdef12",
+        help=tr_multi("UUID de kalendaro. Ekz: abcdef12", "Calendar UUID. E.g. abcdef12", "UUID du calendrier. Ex: abcdef12"),
     ),
     url: str | None = typer.Option(
         None,
         "--url",
-        help="Nova URL. Ekz: --url https://example.com/nova.ics",
+        help=tr_multi("Nova URL. Ekz: --url https://example.com/nova.ics", "New URL. E.g. --url https://example.com/new.ics", "Nouvelle URL. Ex: --url https://example.com/nouveau.ics"),
     ),
     uzantnomo: str | None = typer.Option(
         None,
         "-u",
         "--uzantnomo",
-        help="Nova uzantnomo. Ekz: -u bob",
+        help=tr_multi("Nova uzantnomo. Ekz: -u bob", "New username. E.g. -u bob", "Nouveau nom d'utilisateur. Ex: -u bob"),
     ),
     pasvorto: str | None = typer.Option(
         None,
         "-p",
         "--pasvorto",
-        help="Nova pasvorto (malplena por forigi). Ekz: -p secret123",
+        help=tr_multi("Nova pasvorto (malplena por forigi). Ekz: -p secret123", "New password (empty to remove). E.g. -p secret123", "Nouveau mot de passe (vide pour supprimer). Ex: -p secret123"),
     ),
 ) -> None:
     """Modifi kalendaran agordon laŭ UUID."""
@@ -244,7 +244,7 @@ def modifi(
 def forigi_kalendaro(
     kalendaroj: list[str] = typer.Argument(
         ...,
-        help="Kalendaro UUID(j). Ekz: abcdef12",
+        help=tr_multi("Kalendaro UUID(j). Ekz: abcdef12", "Calendar UUID(s). E.g. abcdef12", "UUID du calendrier. Ex: abcdef12"),
     ),
 ) -> None:
     """Forigi kalendarojn laŭ UUID (kaj ĉiujn eventojn en ili)."""
@@ -270,10 +270,10 @@ def forigi_kalendaro(
 
 @kalendaro_app.command()
 def ls(
-    dato1: str | None = typer.Argument(None, help="Komenca dato (YYYYMMDD/MMDD/DD)."),
-    dato2: str | None = typer.Argument(None, help="Fina dato (opcia)."),
+    dato1: str | None = typer.Argument(None, help=tr_multi("Komenca dato (YYYYMMDD/MMDD/DD).", "Start date (YYYYMMDD/MMDD/DD).", "Date de début (AAAAMMJJ/MMJJ/JJ).")),
+    dato2: str | None = typer.Argument(None, help=tr_multi("Fina dato (opcia).", "End date (optional).", "Date de fin (optionnelle).")),
     kalendaro: list[str] | None = typer.Option(
-        None, "-k", "--kalendaro", help="Filtri laŭ kalendaro UUID."
+        None, "-k", "--kalendaro", help=tr_multi("Filtri laŭ kalendaro UUID.", "Filter by calendar UUID.", "Filtrer par UUID du calendrier.")
     ),
 ) -> None:
     """Montri eventojn en datintervalo."""
@@ -319,7 +319,7 @@ def ls(
 @kalendaro_app.command()
 def vidi(
     eventoj: list[str] = typer.Argument(
-        ..., help="UUID(j) de evento(j). Ekz: abcdef12"
+        ..., help=tr_multi("UUID(j) de evento(j). Ekz: abcdef12", "Event UUID(s). E.g. abcdef12", "UUID de l'événement. Ex: abcdef12")
     ),
 ) -> None:
     """Montri detalojn de unu aŭ pluraj eventoj."""
@@ -348,7 +348,7 @@ def serci(
         None, help="Serĉ-demando (titolo/priskribo)."
     ),
     kalendaro: list[str] | None = typer.Option(
-        None, "-k", "--kalendaro", help="Filtri laŭ kalendaro UUID."
+        None, "-k", "--kalendaro", help=tr_multi("Filtri laŭ kalendaro UUID.", "Filter by calendar UUID.", "Filtrer par UUID du calendrier.")
     ),
     kategorio: str | None = typer.Option(
         None, "--kategorio", help="Filtri laŭ kategorio."
@@ -452,7 +452,7 @@ def amase_forigi(
     dato1: str = typer.Argument(..., help="Komenca dato (YYYYMMDD)."),
     dato2: str = typer.Argument(..., help="Fina dato (YYYYMMDD)."),
     kalendaro: list[str] | None = typer.Option(
-        None, "-k", "--kalendaro", help="Filtri laŭ kalendaro UUID."
+        None, "-k", "--kalendaro", help=tr_multi("Filtri laŭ kalendaro UUID.", "Filter by calendar UUID.", "Filtrer par UUID du calendrier.")
     ),
 ) -> None:
     """Forigi eventojn en intervalo."""

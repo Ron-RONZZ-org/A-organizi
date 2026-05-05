@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from A import error, info, tr_multi
+from A import error, info, tr_multi, tr_multi
 from A.utils.output import console, print_table
 from A.utils.normalize import fold_search_text
 
@@ -174,7 +174,7 @@ def aldoni(
 def vidi(
     referenco: str = typer.Argument(
         ...,
-        help="Todo UUID aŭ titolo. Ekz: todo vidi #abc123",
+        help=tr_multi("Todo UUID aŭ titolo. Ekz: todo vidi #abc123", "Todo UUID or title. E.g. todo view #abc123", "UUID ou titre du todo. Ex: todo voir #abc123"),
     ),
 ) -> None:
     """Montri unu taskon laŭ UUID aŭ titolo."""
@@ -198,7 +198,7 @@ def vidi(
 def modifi(
     referenco: str = typer.Argument(
         ...,
-        help="Todo UUID aŭ titolo. Ekz: todo modifi #abc --stato farita",
+        help=tr_multi("Todo UUID aŭ titolo. Ekz: todo modifi #abc --stato farita", "Todo UUID or title. E.g. todo modify #abc --stato farita", "UUID ou titre du todo. Ex: todo modifier #abc --stato farita"),
     ),
     titolo: str | None = typer.Option(
         None,
@@ -310,7 +310,7 @@ def modifi(
 def forigi(
     referenco: str = typer.Argument(
         ...,
-        help="Todo UUID aŭ titolo. Ekz: todo forigi #abc123",
+        help=tr_multi("Todo UUID aŭ titolo. Ekz: todo forigi #abc123", "Todo UUID or title. E.g. todo delete #abc123", "UUID ou titre du todo. Ex: todo supprimer #abc123"),
     ),
 ) -> None:
     """Forigi taskon laŭ UUID aŭ titolo."""
@@ -346,17 +346,17 @@ def forigi(
 def serci(
     teksto: str = typer.Argument(
         "",
-        help="Serĉa teksto. Ekz: todo serci legi",
+        help=tr_multi("Serĉa teksto. Ekz: todo serci legi", "Search text. E.g. todo search read", "Texte de recherche. Ex: todo rechercher lire"),
     ),
     titolo: str | None = typer.Option(
         None,
         "--titolo",
-        help="Filtri laŭ titolo. Ekz: --titolo raporto",
+        help=tr_multi("Filtri laŭ titolo. Ekz: --titolo raporto", "Filter by title. E.g. --titolo report", "Filtrer par titre. Ex: --titolo rapport"),
     ),
     priskribo: str | None = typer.Option(
         None,
         "--priskribo",
-        help="Filtri laŭ priskribo. Ekz: --priskribo [temo](ec#uuid)",
+        help=tr_multi("Filtri laŭ priskribo. Ekz: --priskribo [temo](ec#uuid)", "Filter by description. E.g. --priskribo [topic](ec#uuid)", "Filtrer par description. Ex: --priskribo [sujet](ec#uuid)"),
     ),
     stato: str | None = typer.Option(
         None,
@@ -381,13 +381,13 @@ def serci(
         None,
         "-P",
         "--prioritato",
-        help="Filtri laŭ prioritato MIN,MAX aŭ nur MIN. Ekz: -P 30,80 aŭ -P 50",
+        help=tr_multi("Filtri laŭ prioritato MIN,MAX aŭ nur MIN. Ekz: -P 30,80 aŭ -P 50", "Filter by priority MIN,MAX or just MIN. E.g. -P 30,80 or -P 50", "Filtrer par priorité MIN,MAX ou juste MIN. Ex: -P 30,80 ou -P 50"),
     ),
     limo: int = typer.Option(
         50,
         "-lo",
         "--limo",
-        help="Maksimumaj rezultoj. Ekz: --limo 20",
+        help=tr_multi("Maksimumaj rezultoj. Ekz: --limo 20", "Maximum results. E.g. --limo 20", "Résultats maximum. Ex: --limo 20"),
     ),
 ) -> None:
     """Serĉi taskojn per kombineblaj filtriloj."""
