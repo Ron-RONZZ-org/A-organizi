@@ -20,6 +20,10 @@ A-organizi - calendar, todo, and journal microapp
 ## Install
 
 ```bash
+# Recommended — fast, reliable
+pip install uv && uv pip install A-organizi
+
+# Traditional
 pip install A-organizi
 ```
 
