@@ -16,20 +16,9 @@ _evento_service: EventService | None = None
 class CalendarService(CRUDService):
     """CRUDService for kalendaroj (calendars) with URL validation."""
 
-    def find_by_uuid_prefix(self, prefix: str) -> list[dict[str, Any]]:
-        """Find calendars whose UUID starts with prefix.
-
-        Args:
-            prefix: UUID prefix string (with or without leading #).
-
-        Returns:
-            List of matching calendar dicts.
-        """
-        token = prefix.lstrip("#")
-        return self.db.execute(
-            "SELECT * FROM kalendaroj WHERE uuid LIKE ? ORDER BY uuid",
-            (f"{token}%",),
-        )
+    def find_by_uuid_prefix(self, prefix: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Find calendars whose UUID starts with prefix (uses core CRUD method)."""
+        return super().find_by_uuid_prefix(prefix.lstrip("#"), limit=limit)
 
     def resolve_uuid(self, ref: str) -> str | None:
         """Resolve a user reference to a calendar UUID.
@@ -89,20 +78,9 @@ class CalendarService(CRUDService):
 class EventService(CRUDService):
     """CRUDService for eventoj (events) with date-range queries."""
 
-    def find_by_uuid_prefix(self, prefix: str) -> list[dict[str, Any]]:
-        """Find events whose UUID starts with prefix.
-
-        Args:
-            prefix: UUID prefix string (with or without leading #).
-
-        Returns:
-            List of matching event dicts.
-        """
-        token = prefix.lstrip("#")
-        return self.db.execute(
-            "SELECT * FROM eventoj WHERE uuid LIKE ? ORDER BY uuid",
-            (f"{token}%",),
-        )
+    def find_by_uuid_prefix(self, prefix: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Find events whose UUID starts with prefix (uses core CRUD method)."""
+        return super().find_by_uuid_prefix(prefix.lstrip("#"), limit=limit)
 
     def resolve_uuid(self, ref: str) -> str | None:
         """Resolve a user reference to an event UUID.
