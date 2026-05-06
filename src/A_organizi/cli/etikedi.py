@@ -158,10 +158,10 @@ def modifi(
 
 @etikedoj_app.command()
 def forigi(
-    referenco: str = typer.Argument(
+    referencoj: Annotated[list[str], typer.Argument(
         ...,
-        help="Etikedo UUID aŭ teksto. Ekz: etikedo forigi urga",
-    ),
+        help="Etikedo UUID aŭ teksto (pluraj). Ekz: etikedo forigi urga grava",
+    )],
 ) -> None:
     """Forigi etikedon laŭ UUID aŭ teksto."""
     svc = get_etikedo_service()

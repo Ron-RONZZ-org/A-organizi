@@ -308,10 +308,10 @@ def modifi(
 
 @todo_app.command()
 def forigi(
-    referenco: str = typer.Argument(
+    referencoj: Annotated[list[str], typer.Argument(
         ...,
-        help=tr_multi("Todo UUID aŭ titolo. Ekz: todo forigi #abc123", "Todo UUID or title. E.g. todo delete #abc123", "UUID ou titre du todo. Ex: todo supprimer #abc123"),
-    ),
+        help=tr_multi("Todo UUID aŭ titolo (pluraj). Ekz: todo forigi #abc123 #def456", "Todo UUID or title (multiple). E.g. todo delete #abc123 #def456", "UUID ou titre du todo (plusieurs). Ex: todo supprimer #abc123 #def456"),
+    )],
 ) -> None:
     """Forigi taskon laŭ UUID aŭ titolo."""
     svc = get_todo_service()

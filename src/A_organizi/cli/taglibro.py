@@ -258,10 +258,10 @@ def modifi(
 
 @taglibro_app.command()
 def forigi(
-    referenco: str = typer.Argument(
+    referencoj: Annotated[list[str], typer.Argument(
         ...,
-        help="Taglibro UUID aŭ titolo. Ekz: taglibro forigi #abc123",
-    ),
+        help="Taglibro UUID aŭ titolo (pluraj). Ekz: taglibro forigi #abc123 #def456",
+    )],
 ) -> None:
     """Forigi taglibran eniron laŭ UUID aŭ titolo."""
     svc = get_taglibro_service()
