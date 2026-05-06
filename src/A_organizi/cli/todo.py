@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated, Optional
+
 import typer
 
 from A import error, info, tr_multi, tr_multi
