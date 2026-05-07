@@ -39,9 +39,11 @@ src/A_organizi/
 ├── cli/              # CLI package (split to avoid 500+ line monoliths)
 │   ├── __init__.py   # Main Typer app, sub-typer registrations
 │   ├── etikedi.py    # etikedoj (labels) commands
-│   ├── todo.py       # todo commands (future)
-│   ├── taglibro.py   # taglibro commands (future)
-│   └── kalendaro.py  # kalendaro commands + sync/undo
+│   ├── todo.py       # todo commands
+│   ├── taglibro.py   # taglibro commands
+│   ├── kalendaro.py  # kalendaro (calendar management) commands
+│   ├── okazajo.py    # okazajo (event management) CRUD commands
+│   └── okazajo_extra.py  # Extended event ops (ICS, sync, undo)
 ├── utils/
 │   ├── __init__.py
 │   ├── labels.py     # Shared label helpers (resolve_refs, parse_blob, etc.)
@@ -145,7 +147,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #3 | ✅ Done | Shared etikedoj (labels) CLI + service |
 | #4 | ✅ Done | taglibro CRUD + search |
 | #5 | ✅ Done | todo priority formula engine + CRUD + search |
-| #6 | ✅ Done | kalendaro calendar management + event CRUD |
+| #6 | ✅ Done | kalendaro/okazajo split — calendar mgmt + event CRUD |
 | #7 | ✅ Done | kalendaro ICS import/export |
 | #8 | ✅ Done | kalendaro CalDAV sync + undo |
 | #9 | ✅ Done | kalendaro --pasvorto option |
