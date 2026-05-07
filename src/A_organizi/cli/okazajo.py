@@ -425,7 +425,7 @@ def amase_forigi(
 
 
 # Register extended commands (ICS import/export, sync, undo)
-from A_organizi.cli.okazajo_extra import register_extra_commands
+from A_organizi.cli.okazajo_util import register_extra_commands
 
 register_extra_commands(okazajo_app)
 

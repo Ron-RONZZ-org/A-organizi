@@ -43,7 +43,7 @@ src/A_organizi/
 │   ├── taglibro.py   # taglibro commands
 │   ├── kalendaro.py  # kalendaro (calendar management) commands
 │   ├── okazajo.py    # okazajo (event management) CRUD commands
-│   └── okazajo_extra.py  # Extended event ops (ICS, sync, undo)
+│   └── okazajo_util.py   # Event utilities (ICS import/export, sync, undo)
 ├── utils/
 │   ├── __init__.py
 │   ├── labels.py     # Shared label helpers (resolve_refs, parse_blob, etc.)
