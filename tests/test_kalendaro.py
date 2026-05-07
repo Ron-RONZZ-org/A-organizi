@@ -235,7 +235,6 @@ class TestKalendaroCLI:
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
         # Mock probe_calendar_config to avoid network calls
-        # Patch where it's IMPORTED, not where it's defined
         import A_organizi.cli.kalendaro as kal_cli
         monkeypatch.setattr(
             kal_cli,
@@ -243,7 +242,6 @@ class TestKalendaroCLI:
             lambda url, user, pw: {"count": "0", "description": "0 evento(j)"},
         )
         monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
-        monkeypatch.setattr(kal_cli, "get_password", lambda uuid: "secret")
 
     def _cal_uuid(self, runner, app, url="https://cal.ics", username="u", password="secret"):
         """Helper: add calendar and return its UUID prefix."""
@@ -294,7 +292,7 @@ class TestKalendaroCLI:
 
         runner = CliRunner()
         runner.invoke(app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"])
-        result = runner.invoke(app, ["kalendaro", "ls-kalendaroj"])
+        result = runner.invoke(app, ["kalendaro", "ls"])
         assert result.exit_code == 0, result.output
         assert "cal.ics" in result.output
 
@@ -316,7 +314,7 @@ class TestKalendaroCLI:
         runner = CliRunner()
         cal_id = self._cal_uuid(runner, app)
         result = runner.invoke(
-            app, ["kalendaro", "forigi-kalendaro", cal_id]
+            app, ["kalendaro", "forigi", cal_id]
         )
         assert result.exit_code == 0, result.output
 
@@ -326,7 +324,7 @@ class TestKalendaroCLI:
 
         runner = CliRunner()
         cal_id = self._cal_uuid(runner, app)
-        result = runner.invoke(app, ["kalendaro", "ls"])
+        result = runner.invoke(app, ["okazajo", "ls"])
         assert result.exit_code == 0, result.output
 
     def test_ls_events_with_date(self):
@@ -335,7 +333,7 @@ class TestKalendaroCLI:
 
         runner = CliRunner()
         self._cal_uuid(runner, app)
-        result = runner.invoke(app, ["kalendaro", "ls", "20260421"])
+        result = runner.invoke(app, ["okazajo", "ls", "20260421"])
         assert result.exit_code == 0, result.output
 
     def test_vidi(self):
@@ -344,10 +342,7 @@ class TestKalendaroCLI:
 
         runner = CliRunner()
         cal_id = self._cal_uuid(runner, app)
-        # Create an event via service
         from A_organizi.service.kalendaro import get_evento_service
-
-        from A_organizi.data.storage import get_db
 
         evt_svc = get_evento_service()
         evt = evt_svc.create({
@@ -356,7 +351,7 @@ class TestKalendaroCLI:
             "komenco": "2026-04-21T10:00:00+00:00",
             "fino": "2026-04-21T11:00:00+00:00",
         })
-        result = runner.invoke(app, ["kalendaro", "vidi", evt["uuid"][:8]])
+        result = runner.invoke(app, ["okazajo", "vidi", evt["uuid"][:8]])
         assert result.exit_code == 0, result.output
         assert "Meeting" in result.output
 
@@ -365,8 +360,8 @@ class TestKalendaroCLI:
         from A_organizi.cli import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["kalendaro", "vidi", "nonexistent"])
-        assert result.exit_code == 0  # "Evento ne trovita" but no error exit
+        result = runner.invoke(app, ["okazajo", "vidi", "nonexistent"])
+        assert result.exit_code == 0
 
     def test_forigi_event(self):
         from typer.testing import CliRunner
@@ -384,7 +379,7 @@ class TestKalendaroCLI:
             "fino": "2026-04-21T11:00:00+00:00",
         })
         result = runner.invoke(
-            app, ["kalendaro", "forigi", evt["uuid"][:8]],
+            app, ["okazajo", "forigi", evt["uuid"][:8]],
             input="j\n",
         )
         assert result.exit_code == 0, result.output
@@ -405,20 +400,29 @@ class TestKalendaroCLI:
             "komenco": "2026-04-21T10:00:00+00:00",
             "fino": "2026-04-21T11:00:00+00:00",
         })
-        result = runner.invoke(app, ["kalendaro", "serci", "special"])
+        result = runner.invoke(app, ["okazajo", "serci", "special"])
         assert result.exit_code == 0, result.output
         assert "Special Event" in result.output
 
-    def test_help_shows_commands(self):
+    def test_help_shows_kalendaro_commands(self):
         from typer.testing import CliRunner
         from A_organizi.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["kalendaro", "--help"])
         assert result.exit_code == 0
-        for cmd in ["aldoni", "ls-kalendaroj", "modifi", "forigi-kalendaro",
-                     "ls", "vidi", "serci", "forigi", "amase-forigi"]:
-            assert cmd in result.output, f"Missing command: {cmd}"
+        for cmd in ["aldoni", "ls", "modifi", "forigi"]:
+            assert cmd in result.output, f"Missing kalendaro command: {cmd}"
+
+    def test_help_shows_okazajo_commands(self):
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "--help"])
+        assert result.exit_code == 0
+        for cmd in ["aldoni", "ls", "vidi", "serci", "modifi", "forigi", "amase-forigi"]:
+            assert cmd in result.output, f"Missing okazajo command: {cmd}"
 
 
 if __name__ == "__main__":
