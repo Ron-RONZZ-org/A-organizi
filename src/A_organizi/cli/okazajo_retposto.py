@@ -69,6 +69,10 @@ def _import_from_retposto(
 
     rs = _get_rs()
 
+    # ── Resolve UUID prefixes → full UUIDs ──────────────────────────────
+    resolved = _resolve_message_uuids(rs, message_uuids)
+    # resolved is a dict: user_input -> full_uuid (or raises Exit on failure)
+
     # ── Validate message UUIDs ───────────────────────────────────────────
     from A_organizi.utils.retposto_ics import (
         count_ics_events,
@@ -76,7 +80,8 @@ def _import_from_retposto(
         import_ics_from_messages,
     )
 
-    msgs = list_ics_attachments(rs, message_uuids)
+    full_uuids = list(resolved.values())
+    msgs = list_ics_attachments(rs, full_uuids)
     if not msgs:
         error(tr_multi(
             "Neniu mesaĝo kun .ics aldonaĵo trovita.",
@@ -116,7 +121,7 @@ def _import_from_retposto(
     # ── Import ───────────────────────────────────────────────────────────
     db = _get_evento_db()
     imported = import_ics_from_messages(
-        db, cal_uuid, rs, message_uuids, overrides=overrides or None,
+        db, cal_uuid, rs, full_uuids, overrides=overrides or None,
     )
 
     total = sum(len(uuids) for uuids in imported.values())
@@ -133,6 +138,57 @@ def _import_from_retposto(
         f"Imported {total} event(s) from {len(imported)} message(s).",
         f"Importé {total} événement(s) depuis {len(imported)} message(s).",
     ))
+
+
+def _resolve_message_uuids(
+    rs: Any, prefixes: list[str],
+) -> dict[str, str]:
+    """Resolve message UUID prefixes to full UUIDs.
+
+    For each prefix, tries exact match first (get_message), then
+    prefix match (find_message_by_uuid_prefix).  Requires exactly
+    one match per prefix.
+
+    Args:
+        rs: A-lien RetpostoService instance.
+        prefixes: User-provided message UUIDs or prefixes.
+
+    Returns:
+        Dict mapping original prefix -> resolved full UUID.
+
+    Raises:
+        typer.Exit(1) if any prefix is ambiguous or not found.
+    """
+    resolved: dict[str, str] = {}
+    for prefix in prefixes:
+        msg = rs.get_message(prefix)
+        if msg:
+            resolved[prefix] = msg["uuid"]
+            continue
+
+        matches = rs.find_message_by_uuid_prefix(prefix)
+        if len(matches) == 1:
+            resolved[prefix] = matches[0]["uuid"]
+            continue
+
+        if len(matches) > 1:
+            error(tr_multi(
+                f"Pluraj mesaĝoj kongruas kun '{prefix}':",
+                f"Multiple messages match '{prefix}':",
+                f"Plusieurs messages correspondent à '{prefix}':",
+            ))
+            for m in matches:
+                subj = (m.get("subjekto", "") or "(sen temo)")[:50]
+                info(f"  {m['uuid'][:8]}  {subj}")
+        else:
+            error(tr_multi(
+                f"Mesaĝo ne trovita: {prefix}",
+                f"Message not found: {prefix}",
+                f"Message non trouvé: {prefix}",
+            ))
+        raise typer.Exit(1)
+
+    return resolved
 
 
 def _get_evento_db():

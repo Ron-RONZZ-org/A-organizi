@@ -22,7 +22,8 @@ def list_ics_attachments(
 
     Args:
         retposto_svc: A-lien RetpostoService instance.
-        message_uuids: Email message UUIDs to check.
+        message_uuids: Full email message UUIDs (prefixes must be
+            resolved before calling this function).
 
     Returns:
         Dict mapping msg_uuid -> list of .ics attachment dicts.
@@ -169,7 +170,8 @@ def import_ics_from_messages(
         db: SQLiteDB instance.
         calendar_uuid: Target calendar UUID.
         retposto_svc: A-lien RetpostoService instance.
-        message_uuids: Email message UUIDs to scan.
+        message_uuids: Full email message UUIDs (prefixes must be
+            resolved before calling this function).
         overrides: Optional CLI flag overrides.
 
     Returns:
