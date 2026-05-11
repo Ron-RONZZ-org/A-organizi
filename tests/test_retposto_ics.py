@@ -300,7 +300,9 @@ class TestImportIcsFromMessages:
         result = import_ics_from_messages(db_conn, "cal-001", mock_svc, ["msg-1"])
         assert "msg-1" in result
         assert len(result["msg-1"]) == 2
-        mock_svc.get_attachment_content.assert_called_once_with("msg-1", "invite.ics")
+        mock_svc.get_attachment_content.assert_called_once_with(
+            "msg-1", "invite.ics", timeout=15,
+        )
 
     def test_skips_non_ics_attachments(self, db_conn):
         """Non-.ics attachments are ignored."""
@@ -324,7 +326,7 @@ class TestImportIcsFromMessages:
             {"dosiernomo": "part1.ics", "mime_tipo": "text/calendar"},
             {"dosiernomo": "part2.ics", "mime_tipo": "text/calendar"},
         ]
-        def content_side_effect(msg_uuid, filename):
+        def content_side_effect(msg_uuid, filename, timeout=None):
             if filename == "part1.ics":
                 return SAMPLE_ICS.encode("utf-8")
             return SINGLE_EVENT_ICS.encode("utf-8")

@@ -192,7 +192,7 @@ def import_ics_from_messages(
         for att in ics_atts:
             try:
                 content = retposto_svc.get_attachment_content(
-                    msg_uuid, att["dosiernomo"],
+                    msg_uuid, att["dosiernomo"], timeout=15,
                 )
                 ics_text = content.decode("utf-8", errors="replace")
                 imported.extend(

@@ -97,7 +97,7 @@ def _import_from_retposto(
             for att in atts:
                 try:
                     content = rs.get_attachment_content(
-                        msg_uuid, att["dosiernomo"],
+                        msg_uuid, att["dosiernomo"], timeout=15,
                     )
                     total_events += count_ics_events(
                         content.decode("utf-8", errors="replace"),
