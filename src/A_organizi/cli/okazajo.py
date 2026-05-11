@@ -65,16 +65,16 @@ def aldoni(
         ..., "--kalendaro", "-k",
         help=tr_multi("Kalendaro UUID.", "Calendar UUID.", "UUID du calendrier."),
     ),
-    titolo: str = typer.Option(
-        ..., "--titolo", "-t",
+    titolo: Optional[str] = typer.Option(
+        None, "--titolo", "-t",
         help=tr_multi("Titolo de evento.", "Event title.", "Titre de l'événement."),
     ),
-    komenco: str = typer.Option(
-        ..., "--komenco",
+    komenco: Optional[str] = typer.Option(
+        None, "--komenco",
         help=tr_multi("Komenca dato (YYYYMMDD aŭ YYYY-MM-DD).", "Start date (YYYYMMDD or YYYY-MM-DD).", "Date de début (AAAAMMJJ ou AAAA-MM-JJ)."),
     ),
-    fino: str = typer.Option(
-        ..., "--fino",
+    fino: Optional[str] = typer.Option(
+        None, "--fino",
         help=tr_multi("Fina dato (YYYYMMDD aŭ YYYY-MM-DD).", "End date (YYYYMMDD or YYYY-MM-DD).", "Date de fin (AAAAMMJJ ou AAAA-MM-JJ)."),
     ),
     loko: Optional[str] = typer.Option(
@@ -93,12 +93,42 @@ def aldoni(
         None, "--ripeto", "-r",
         help=tr_multi("Ripeto (ekz: daily, weekly).", "Recurrence (e.g. daily, weekly).", "Récurrence (ex: daily, weekly)."),
     ),
+    retposto: Optional[list[str]] = typer.Option(
+        None, "--retposto", "-R",
+        help=tr_multi(
+            "Retpoŝtaj mesaĝoj UUID(j) por importi .ics el aldonaĵoj.",
+            "Email message UUID(s) to import .ics from attachments.",
+            "UUID de messages email pour importer .ics des pièces jointes.",
+        ),
+    ),
 ) -> None:
     """Aldoni novan eventon al kalendaro."""
     cal_svc = get_kalendaro_service()
     cal_uuid = cal_svc.resolve_uuid(kalendaro)
     if not cal_uuid:
-        error(tr_multi(f"Kalendaro ne trovita: {kalendaro}", f"Calendar not found: {kalendaro}", f"Calendrier non trouvé: {kalendaro}"))
+        error(tr_multi(
+            f"Kalendaro ne trovita: {kalendaro}",
+            f"Calendar not found: {kalendaro}",
+            f"Calendrier non trouvé: {kalendaro}",
+        ))
+        raise typer.Exit(1)
+
+    # ── Retposto workflow: import .ics from email attachments ────────────
+    if retposto:
+        _import_from_retposto(
+            cal_uuid=cal_uuid,
+            message_uuids=retposto,
+            overrides=_build_overrides(titolo, komenco, fino, loko, kategorio, priskribo, ripeto),
+        )
+        return
+
+    # ── Traditional single-event workflow ─────────────────────────────────
+    if titolo is None or komenco is None or fino is None:
+        error(tr_multi(
+            "Bezonata --titolo, --komenco kaj --fino (aŭ uzu --retposto/-R).",
+            "--titolo, --komenco and --fino required (or use --retposto/-R).",
+            "--titolo, --komenco et --fino requis (ou utilisez --retposto/-R).",
+        ))
         raise typer.Exit(1)
 
     try:
@@ -126,6 +156,11 @@ def aldoni(
     svc = get_evento_service()
     result = svc.create(data)
     info(f"Aldonis eventon #{result['uuid'][:8]}: {titolo}")
+
+
+# ── Retposto import (defined in okazajo_retposto.py) ────────────────────────
+
+from A_organizi.cli.okazajo_retposto import _build_overrides, _import_from_retposto
 
 
 @okazajo_app.command()

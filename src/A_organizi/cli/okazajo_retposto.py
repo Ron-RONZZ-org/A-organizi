@@ -1,0 +1,173 @@
+"""Retposto import helpers for okazajo aldoni.
+
+CLI-level support functions for importing .ics calendar events
+from A-lien email attachments.  Split from okazajo.py to keep
+each file under 500 lines.
+"""
+
+from __future__ import annotations
+
+import typer
+
+from A import error, info, tr_multi, warning
+
+
+def _build_overrides(
+    titolo: str | None,
+    komenco: str | None,
+    fino: str | None,
+    loko: str | None,
+    kategorio: str | None,
+    priskribo: str | None,
+    ripeto: str | None,
+) -> dict[str, str]:
+    """Build overrides dict from CLI flags, excluding None values.
+
+    Returns:
+        Dict with only the flags the user explicitly provided.
+    """
+    d: dict[str, str] = {}
+    if titolo is not None:
+        d["titolo"] = titolo.strip()
+    if komenco is not None:
+        d["komenco"] = komenco.strip()
+    if fino is not None:
+        d["fino"] = fino.strip()
+    if loko is not None:
+        d["loko"] = loko.strip()
+    if kategorio is not None:
+        d["kategorio"] = kategorio.strip()
+    if priskribo is not None:
+        d["priskribo"] = priskribo.strip()
+    if ripeto is not None:
+        d["ripeto"] = ripeto.strip()
+    return d
+
+
+def _import_from_retposto(
+    cal_uuid: str,
+    message_uuids: list[str],
+    overrides: dict[str, str],
+) -> None:
+    """Import .ics calendar events from A-lien email attachments.
+
+    Handles runtime detection of A-lien, install prompt,
+    override warning, and import reporting.
+
+    Args:
+        cal_uuid: Resolved target calendar UUID.
+        message_uuids: Email message UUIDs to scan.
+        overrides: Non-empty dict means user also passed traditional flags.
+    """
+    # ── Runtime A-lien detection ─────────────────────────────────────────
+    try:
+        from A_lien.service import get_retposto_service as _get_rs
+    except ImportError:
+        _prompt_install_alien()
+        # Retry after install
+        from A_lien.service import get_retposto_service as _get_rs  # type: ignore[import-untyped]
+
+    rs = _get_rs()
+
+    # ── Validate message UUIDs ───────────────────────────────────────────
+    from A_organizi.utils.retposto_ics import (
+        count_ics_events,
+        list_ics_attachments,
+        import_ics_from_messages,
+    )
+
+    msgs = list_ics_attachments(rs, message_uuids)
+    if not msgs:
+        error(tr_multi(
+            "Neniu mesaĝo kun .ics aldonaĵo trovita.",
+            "No message with .ics attachment found.",
+            "Aucun message avec pièce jointe .ics trouvé.",
+        ))
+        raise typer.Exit(1)
+
+    # ── Override warning (if overrides affect multiple events) ───────────
+    if overrides:
+        total_events = 0
+        for msg_uuid, atts in msgs.items():
+            for att in atts:
+                try:
+                    content = rs.get_attachment_content(
+                        msg_uuid, att["dosiernomo"],
+                    )
+                    total_events += count_ics_events(
+                        content.decode("utf-8", errors="replace"),
+                    )
+                except Exception:
+                    pass
+
+        if total_events > 1:
+            override_names = ", ".join(f"--{k}" for k in overrides)
+            warning(
+                tr_multi(
+                    f"Atentu: {override_names} anstataŭigos la kampojn de"
+                    f" {total_events} eventoj.",
+                    f"Warning: {override_names} will overwrite fields of"
+                    f" {total_events} events.",
+                    f"Attention : {override_names} remplacera les champs de"
+                    f" {total_events} événements.",
+                ),
+            )
+
+    # ── Import ───────────────────────────────────────────────────────────
+    db = _get_evento_db()
+    imported = import_ics_from_messages(
+        db, cal_uuid, rs, message_uuids, overrides=overrides or None,
+    )
+
+    total = sum(len(uuids) for uuids in imported.values())
+    if total == 0:
+        info(tr_multi(
+            "Neniu nova evento importita (eble jam ekzistas duplicaĵoj).",
+            "No new events imported (may be duplicates).",
+            "Aucun nouvel événement importé (peut-être des doublons).",
+        ))
+        return
+
+    info(tr_multi(
+        f"Importis {total} evento(j)n el {len(imported)} mesaĝo(j).",
+        f"Imported {total} event(s) from {len(imported)} message(s).",
+        f"Importé {total} événement(s) depuis {len(imported)} message(s).",
+    ))
+
+
+def _get_evento_db():
+    """Get the SQLiteDB instance used by the EventService."""
+    from A_organizi.service.kalendaro import get_evento_service
+    return get_evento_service().db
+
+
+def _prompt_install_alien() -> None:
+    """Prompt user to install A-lien if missing."""
+    confirm_text = tr_multi(
+        "A-lien estas bezonata por --retposto. Ĉu instali ĝin nun?",
+        "A-lien is required for --retposto. Install it now?",
+        "A-lien est requis pour --retposto. Installer maintenant ?",
+    )
+    answer = typer.confirm(confirm_text, default=True)
+    if not answer:
+        raise typer.Exit(1)
+
+    import subprocess
+    import sys
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "A-lien"],
+        )
+    except subprocess.CalledProcessError:
+        error(tr_multi(
+            "Ne povis instali A-lien.",
+            "Could not install A-lien.",
+            "Impossible d'installer A-lien.",
+        ))
+        raise typer.Exit(1)
+
+
+__all__ = [
+    "_build_overrides",
+    "_import_from_retposto",
+]
