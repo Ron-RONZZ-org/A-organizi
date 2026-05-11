@@ -42,13 +42,15 @@ src/A_organizi/
 │   ├── todo.py       # todo commands
 │   ├── taglibro.py   # taglibro commands
 │   ├── kalendaro.py  # kalendaro (calendar management) commands
-│   ├── okazajo.py    # okazajo (event management) CRUD commands
-│   └── okazajo_util.py   # Event utilities (ICS import/export, sync, undo)
+│   ├── okazajo.py         # okazajo (event management) CRUD commands
+│   ├── okazajo_retposto.py # Retposto import helpers (split from okazajo.py for 500-line limit)
+│   └── okazajo_util.py    # Event utilities (ICS import/export, sync, undo)
 ├── utils/
 │   ├── __init__.py
-│   ├── labels.py     # Shared label helpers (resolve_refs, parse_blob, etc.)
-│   ├── sync.py      # CalDAV client, sync queue, password management
-│   └── undo.py      # Calendar/event undo operations
+│   ├── labels.py          # Shared label helpers (resolve_refs, parse_blob, etc.)
+│   ├── retposto_ics.py    # .ics import from A-lien email attachments
+│   ├── sync.py            # CalDAV client, sync queue, password management
+│   └── undo.py            # Calendar/event undo operations
 ├── service.kalendaro.py  # Calendar + event CRUD services
 ├── data/
 │   └── storage.py    # SQLite (uses A.data.base)
@@ -152,6 +154,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #8 | ✅ Done | kalendaro CalDAV sync + undo |
 | #9 | ✅ Done | kalendaro --pasvorto option |
 | #10 | ✅ Done | kalendaro probe_calendar_config validation |
+| #18 | ✅ Done | -R/--retposto option for okazajo aldoni to import .ics from email |
 
 ## Migration from autish
 
