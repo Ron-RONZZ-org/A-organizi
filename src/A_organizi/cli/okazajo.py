@@ -197,13 +197,13 @@ def ls(
         info(tr_multi("Neniu evento trovita.", "No events found.", "Aucun événement trouvé."))
         return
 
-    table = Table(header_style="dim", border_style="dim")
+    table = Table()
     table.add_column("UUID", style="cyan", width=10)
     table.add_column("Titolo")
     table.add_column("Dato", width=12)
     table.add_column("Komenco", width=8)
     table.add_column("Fino", width=8)
-    table.add_column("Kalendaro", style="dim", width=10)
+    table.add_column("Kalendaro", width=10)
     for row in rows:
         table.add_row(
             str(row["uuid"])[:8],
@@ -295,13 +295,13 @@ def serci(
         info(tr_multi("Neniu rezulto.", "No results.", "Aucun résultat."))
         return
 
-    table = Table(header_style="dim", border_style="dim")
+    table = Table()
     table.add_column("UUID", style="cyan", width=10)
     table.add_column("Titolo")
     table.add_column("Dato", width=12)
     table.add_column("Komenco", width=8)
     table.add_column("Fino", width=8)
-    table.add_column("Kalendaro", style="dim", width=10)
+    table.add_column("Kalendaro", width=10)
     for row in results:
         table.add_row(
             str(row["uuid"])[:8],

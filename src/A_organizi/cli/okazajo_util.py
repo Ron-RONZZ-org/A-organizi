@@ -134,7 +134,7 @@ def register_extra_commands(app: typer.Typer) -> None:
             if not rows:
                 info(tr_multi("Neniu malfaro.", "No undo.", "Aucune annulation."))
                 return
-            table = Table(header_style="dim", border_style="dim")
+            table = Table()
             table.add_column("ID", style="cyan", width=10)
             table.add_column(tr_multi("Operacio", "Operation"), width=20)
             table.add_column(tr_multi("Dato", "Date"), width=20)
