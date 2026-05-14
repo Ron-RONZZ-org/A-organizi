@@ -321,10 +321,10 @@ def serci(
         "--de",
         help='Filtri ekde tempo (YYYYMMDD_HHMM). Ekz: --de 20260401',
     ),
-    gxis: str | None = typer.Option(
+    gis: str | None = typer.Option(
         None,
-        "--gxis",
-        help='Filtri ĝis tempo (YYYYMMDD_HHMM). Ekz: --gxis 20260430',
+        "--gis",
+        help='Filtri ĝis tempo (YYYYMMDD_HHMM). Ekz: --gis 20260430',
     ),
     limo: int = typer.Option(
         50,
@@ -344,23 +344,12 @@ def serci(
         )
 
     de_iso: str | None = None
-    gxis_iso: str | None = None
-    try:
-        if de:
-            de_iso = parse_partial_datetime(de)
-        if gxis:
-            gxis_iso = parse_partial_datetime(gxis)
-    except ValueError as exc:
-        error(str(exc))
-        raise typer.Exit(1) from exc
-
-    results, fuzzy_used = svc.search_taglibro(
-        query=teksto or None,
-        titolo=titolo,
-        priskribo=priskribo,
-        etikedo=etikedo_ids or None,
-        de_tempo=de_iso,
-        gxis_tempo=gxis_iso,
+    gis_iso: str | None = None
+    ...
+        if gis:
+            gis_iso = parse_partial_datetime(gis)
+    ...
+        gis_tempo=gis_iso,
         limit=limo,
     )
 

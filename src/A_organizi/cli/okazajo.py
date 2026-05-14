@@ -260,7 +260,7 @@ def serci(
     dato_de: Optional[str] = typer.Option(
         None, "--dato-de", help=tr_multi("Komenca dato (YYYYMMDD).", "Start date (YYYYMMDD).", "Date de début (AAAAMMJJ)."),
     ),
-    dato_gxis: Optional[str] = typer.Option(
+    dato_gis: Optional[str] = typer.Option(
         None, "--dato-gis", help=tr_multi("Fina dato (YYYYMMDD).", "End date (YYYYMMDD).", "Date de fin (AAAAMMJJ)."),
     ),
     limo: int = typer.Option(
@@ -271,12 +271,12 @@ def serci(
     svc = get_evento_service()
 
     de_iso: Optional[str] = None
-    gxis_iso: Optional[str] = None
+    gis_iso: Optional[str] = None
     try:
         if dato_de:
             de_iso = parse_partial_datetime(dato_de)
-        if dato_gxis:
-            gxis_iso = parse_partial_datetime(dato_gxis)
+        if dato_gis:
+            gis_iso = parse_partial_datetime(dato_gis)
     except ValueError as exc:
         error(str(exc))
         raise typer.Exit(1) from exc
@@ -287,7 +287,7 @@ def serci(
         kategorio=kategorio,
         loko=loko,
         dato_de=de_iso,
-        dato_gxis=gxis_iso,
+        dato_gis=gis_iso,
         limit=limo,
     )
 
