@@ -171,14 +171,14 @@ def forigi(
     labels = list_etikedoj(db)
     item = resolve_reference(
         labels,
-        referenco,
+        referencoj,
         text_getter=lambda i: str(i.get("teksto") or ""),
         kind_label="etikedo",
         allow_fuzzy=True,
         interactive=True,
     )
     if item is None:
-        error(f"Etikedo ne trovita: {referenco}")
+        error(f"Etikedo ne trovita: {referencoj}")
         raise typer.Exit(1)
 
     uid = str(item["uuid"])

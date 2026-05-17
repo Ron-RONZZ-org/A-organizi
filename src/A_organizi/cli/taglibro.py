@@ -270,14 +270,14 @@ def forigi(
     entries = svc.list_with_labels(limit=200)
     item = resolve_reference(
         entries,
-        referenco,
+        referencoj,
         text_getter=lambda i: str(i.get("titolo") or ""),
         kind_label="taglibro",
         allow_fuzzy=True,
         interactive=True,
     )
     if item is None:
-        error(f"Taglibro-eniro ne trovita: {referenco}")
+        error(f"Taglibro-eniro ne trovita: {referencoj}")
         raise typer.Exit(1)
 
     uid = str(item.get("uuid") or "")
@@ -345,11 +345,22 @@ def serci(
 
     de_iso: str | None = None
     gis_iso: str | None = None
-    ...
+    try:
+        if de:
+            de_iso = parse_partial_datetime(de)
         if gis:
             gis_iso = parse_partial_datetime(gis)
-    ...
-        gis_tempo=gis_iso,
+    except ValueError as exc:
+        error(str(exc))
+        raise typer.Exit(1) from exc
+
+    results, fuzzy_used = svc.search_taglibro(
+        query=teksto or None,
+        titolo=titolo,
+        priskribo=priskribo,
+        etikedo=etikedo_ids or None,
+        de_tempo=de_iso,
+        gxis_tempo=gis_iso,
         limit=limo,
     )
 

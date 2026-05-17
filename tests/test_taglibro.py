@@ -382,7 +382,7 @@ class TestTaglibroCLI:
         )
         result = runner.invoke(
             app,
-            ["taglibro", "serci", "--de", "20260410", "--gxis", "20260420"],
+            ["taglibro", "serci", "--de", "20260410", "--gis", "20260420"],
         )
         assert result.exit_code == 0, result.output
         # Old and new should be outside range, result may be empty — should not crash

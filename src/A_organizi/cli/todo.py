@@ -320,14 +320,14 @@ def forigi(
     entries = svc.list_with_labels(limit=200)
     item = resolve_reference(
         entries,
-        referenco,
+        referencoj,
         text_getter=lambda i: str(i.get("titolo") or ""),
         kind_label="todo",
         allow_fuzzy=True,
         interactive=True,
     )
     if item is None:
-        error(f"Todo ne trovita: {referenco}")
+        error(f"Todo ne trovita: {referencoj}")
         raise typer.Exit(1)
 
     uid = str(item.get("uuid") or "")

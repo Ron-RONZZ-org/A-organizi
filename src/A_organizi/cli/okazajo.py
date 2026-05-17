@@ -287,7 +287,7 @@ def serci(
         kategorio=kategorio,
         loko=loko,
         dato_de=de_iso,
-        dato_gis=gis_iso,
+        dato_gxis=gis_iso,
         limit=limo,
     )
 

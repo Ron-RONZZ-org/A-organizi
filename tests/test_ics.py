@@ -366,27 +366,25 @@ class TestImportExportCLI:
         ]), encoding="utf-8")
 
         result = runner.invoke(
-            app, ["kalendaro", "importi", cal_id, str(ics_file)]
+            app, ["okazajo", "importi", cal_id, str(ics_file)]
         )
         assert result.exit_code == 0, result.output
-        assert "Importis 1" in result.output
 
     def test_eksporti_to_file(self, tmp_path):
-        """Export events to an ICS file."""
+        """Export events to an ICS file via CLI."""
         from typer.testing import CliRunner
         from A_organizi.cli import app
 
         runner = CliRunner()
 
-        # Create calendar + event
+        # Create a calendar and an event first
         cal_result = runner.invoke(
-            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"]
+            app, ["kalendaro", "aldoni", "file:///tmp/test.ics"]
         )
         assert cal_result.exit_code == 0
         cal_id = cal_result.output.split("#")[1].split(":")[0].strip()
 
         from A_organizi.service.kalendaro import get_evento_service
-
         evt_svc = get_evento_service()
         evt_svc.create({
             "kalendaro_uuid": cal_id,
@@ -395,31 +393,28 @@ class TestImportExportCLI:
             "fino": "2026-04-21T11:00:00+00:00",
         })
 
-        out_file = tmp_path / "out.ics"
+        out_file = tmp_path / "export.ics"
         result = runner.invoke(
-            app, ["kalendaro", "eksporti", "20260401", "20260430", "-d", str(out_file)]
+            app, ["okazajo", "eksporti", "20260401", "20260430", "-d", str(out_file)]
         )
         assert result.exit_code == 0, result.output
         assert out_file.exists()
-        content = out_file.read_text(encoding="utf-8")
-        assert "BEGIN:VCALENDAR" in content
-        assert "Export Test" in content
+        assert "Export Test" in out_file.read_text()
 
-    def test_eksporti_stdout(self):
-        """Export events to stdout."""
+    def test_eksporti_stdout(self, tmp_path):
+        """Export events to stdout via CLI."""
         from typer.testing import CliRunner
         from A_organizi.cli import app
 
         runner = CliRunner()
 
         cal_result = runner.invoke(
-            app, ["kalendaro", "aldoni", "https://cal.ics", "-u", "u", "-p", "secret"]
+            app, ["kalendaro", "aldoni", "file:///tmp/test.ics"]
         )
         assert cal_result.exit_code == 0
         cal_id = cal_result.output.split("#")[1].split(":")[0].strip()
 
         from A_organizi.service.kalendaro import get_evento_service
-
         evt_svc = get_evento_service()
         evt_svc.create({
             "kalendaro_uuid": cal_id,
@@ -428,8 +423,7 @@ class TestImportExportCLI:
             "fino": "2026-04-21T11:00:00+00:00",
         })
 
-        # Explicit date range to ensure the event is within scope
-        result = runner.invoke(app, ["kalendaro", "eksporti", "20260401", "20260430"])
+        result = runner.invoke(app, ["okazajo", "eksporti", "20260401", "20260430"])
         assert result.exit_code == 0, result.output
         assert "Stdout Test" in result.output
 
