@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from A.data.base import SQLiteDB
+from A.data.base import SQLiteDB, backup_db, health_check
 
 _DATA_DIR: Path = Path.home() / ".local" / "share" / "A"
 _DB_FILE: Path = _DATA_DIR / "organizi.db"
@@ -170,6 +170,10 @@ def ensure_dirs() -> None:
 def get_db() -> SQLiteDB:
     """Get database connection with all tables and indexes created."""
     ensure_dirs()
+    if not health_check(_DB_FILE):
+        from A.data.base import repair_db as _repair
+        _repair(_DB_FILE)
+    backup_db(_DB_FILE)
     db = SQLiteDB(_DB_FILE)
 
     for stmt in _CREATE_STMTS:
