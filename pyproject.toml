@@ -34,7 +34,7 @@ A-organizi = "A_organizi.data.migration_register:register"
 packages = ["src/A_organizi"]
 
 [tool.uv.sources]
-a-core = { path = "../A-core" }
+a-core = { path = "../A-core", editable = true }
 
 [tool.poetry]
 name = "A-organizi"
