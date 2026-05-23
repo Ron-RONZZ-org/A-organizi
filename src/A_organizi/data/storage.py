@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from A.core.paths import data_dir
 from A.data.base import SQLiteDB, backup_db, health_check
 
-_DATA_DIR: Path = Path.home() / ".local" / "share" / "A"
+_DATA_DIR: Path = data_dir()
 _DB_FILE: Path = _DATA_DIR / "organizi.db"
 
 # ──────────────────────────────────────────────────────────────────────────────
