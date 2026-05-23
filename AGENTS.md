@@ -155,6 +155,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #9 | ✅ Done | kalendaro --pasvorto option |
 | #10 | ✅ Done | kalendaro probe_calendar_config validation |
 | #18 | ✅ Done | -R/--retposto option for okazajo aldoni to import .ics from email |
+| #24 | ✅ Done | todo forigi: per-item resolution and confirmation for multi-identifier input |
 
 ## Migration from autish
 
