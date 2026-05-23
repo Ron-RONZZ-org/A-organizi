@@ -383,7 +383,46 @@ class TestTodoCLI:
             app, ["todo", "forigi", "Konservota"], input="N\n"
         )
         assert result.exit_code == 0
-        assert "Nuligita" in result.output
+        assert "preterlasis" in result.output.lower() or "skipped" in result.output.lower()
+
+    def test_forigi_multiple_confirmed(self):
+        """Delete multiple tasks with confirmation."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        runner.invoke(app, ["todo", "aldoni", "Unua forigota", "-P", "10"])
+        runner.invoke(app, ["todo", "aldoni", "Dua forigota", "-P", "20"])
+        result = runner.invoke(
+            app, ["todo", "forigi", "Unua forigota", "Dua forigota"], input="j\nj\n"
+        )
+        assert result.exit_code == 0, result.output
+        assert "Forigis 2" in result.output or "Deleted 2" in result.output
+
+    def test_forigi_multiple_mixed(self):
+        """Delete multiple: one confirmed, one cancelled."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        runner.invoke(app, ["todo", "aldoni", "Jese", "-P", "10"])
+        runner.invoke(app, ["todo", "aldoni", "Nea", "-P", "20"])
+        result = runner.invoke(
+            app, ["todo", "forigi", "Jese", "Nea"], input="j\nN\n"
+        )
+        assert result.exit_code == 0, result.output
+        assert "Forigis 1" in result.output or "Deleted 1" in result.output
+        assert "preterlasis" in result.output.lower() or "skipped" in result.output.lower()
+
+    def test_forigi_nonexistent(self):
+        """Delete a non-existent reference reports error."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["todo", "forigi", "neekzistanta"])
+        assert result.exit_code == 0
+        assert "ne trovita" in result.output.lower() or "not found" in result.output.lower()
 
     def test_serci(self):
         """Search tasks."""

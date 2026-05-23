@@ -315,33 +315,53 @@ def forigi(
         help=tr_multi("Todo UUID aŭ titolo (pluraj). Ekz: todo forigi #abc123 #def456", "Todo UUID or title (multiple). E.g. todo delete #abc123 #def456", "UUID ou titre du todo (plusieurs). Ex: todo supprimer #abc123 #def456"),
     )],
 ) -> None:
-    """Forigi taskon laŭ UUID aŭ titolo."""
+    """Forigi taskojn laŭ UUID aŭ titolo."""
     svc = get_todo_service()
     entries = svc.list_with_labels(limit=200)
-    item = resolve_reference(
-        entries,
-        referencoj,
-        text_getter=lambda i: str(i.get("titolo") or ""),
-        kind_label="todo",
-        allow_fuzzy=True,
-        interactive=True,
-    )
-    if item is None:
-        error(f"Todo ne trovita: {referencoj}")
-        raise typer.Exit(1)
 
-    uid = str(item.get("uuid") or "")
-    rendered = render_text(str(item.get("titolo") or ""))
-    answer = typer.prompt(
-        f"Forigi todo #{uid[:8]} \"{rendered}\"? (j/N)",
-        default="N",
-    )
-    if answer.strip().lower() not in {"j", "jes", "y", "yes"}:
-        info("Nuligita.")
-        return
+    deleted = 0
+    errors: list[tuple[str, str]] = []
 
-    svc.delete(uid, soft=False)
-    info(f"Forigis todo #{uid[:8]}.")
+    for ref in referencoj:
+        item = resolve_reference(
+            entries,
+            ref,
+            text_getter=lambda i: str(i.get("titolo") or ""),
+            kind_label="todo",
+            allow_fuzzy=True,
+            interactive=True,
+        )
+        if item is None:
+            errors.append((ref, tr_multi("ne trovita", "not found", "non trouvé")))
+            continue
+
+        uid = str(item.get("uuid") or "")
+        rendered = render_text(str(item.get("titolo") or ""))
+        answer = typer.prompt(
+            f"Forigi todo #{uid[:8]} \"{rendered}\"? (j/N)",
+            default="N",
+        )
+        if answer.strip().lower() not in {"j", "jes", "y", "yes"}:
+            info(tr_multi(f"Preterlasis {ref}.", f"Skipped {ref}.", f"Ignoré {ref}."))
+            continue
+
+        svc.delete(uid, soft=False)
+        deleted += 1
+        entries = [e for e in entries if str(e.get("uuid") or "") != uid]
+        info(f"Forigis todo #{uid[:8]}.")
+
+    # Report resolution errors
+    for ref, reason in errors:
+        error(tr_multi(
+            "Forigi {i}: {r}", "Delete {i}: {r}", "Supprimer {i} : {r}",
+        ).format(i=ref, r=reason))
+
+    if deleted:
+        info(tr_multi(
+            f"Forigis {deleted} el {len(referencoj)} todo.",
+            f"Deleted {deleted} of {len(referencoj)} todos.",
+            f"Supprimé {deleted} sur {len(referencoj)} todos.",
+        ))
 
 
 @todo_app.command()
