@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from A.core.paths import data_dir
+from A.core.backup_targets import BackupTarget
 from A.data.base import SQLiteDB, backup_db, health_check
 
 _DATA_DIR: Path = data_dir()
@@ -185,6 +186,18 @@ def get_db() -> SQLiteDB:
     return db
 
 
+def get_backup_targets() -> list[BackupTarget]:
+    """Return backup targets for A-organizi."""
+    return [
+        BackupTarget(
+            path=_DB_FILE,
+            category="data",
+            module="organizi",
+            label="Organizi database",
+        ),
+    ]
+
+
 __all__ = [
     "ensure_dirs",
     "get_db",
@@ -192,4 +205,5 @@ __all__ = [
     "_CREATE_INDEXES",
     "_CREATE_SYNC_QUEUE",
     "_CREATE_UNDO_CHANGES",
+    "get_backup_targets",
 ]

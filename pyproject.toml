@@ -31,6 +31,9 @@ taglibro = "A_organizi.cli.taglibro:taglibro_app"
 [project.entry-points."A.migrations"]
 A-organizi = "A_organizi.data.migration_register:register"
 
+[project.entry-points."A.backup"]
+organizi = "A_organizi.data.storage:get_backup_targets"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/A_organizi"]
 
