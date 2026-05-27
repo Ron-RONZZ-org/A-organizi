@@ -53,7 +53,7 @@ src/A_organizi/
 │   └── undo.py            # Calendar/event undo operations
 ├── service.kalendaro.py  # Calendar + event CRUD services
 ├── data/
-│   └── storage.py    # SQLite (uses A.data.base)
+│   └── storage.py    # SQLite (uses A.data.base) — get_db() singleton
 ```
 
 ## Database Schema
@@ -156,6 +156,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #10 | ✅ Done | kalendaro probe_calendar_config validation |
 | #18 | ✅ Done | -R/--retposto option for okazajo aldoni to import .ics from email |
 | #24 | ✅ Done | todo forigi: per-item resolution and confirmation for multi-identifier input |
+| #26 | ✅ Done | get_db() singleton caching + conftest A_DIR isolation |
 
 ## Migration from autish
 
