@@ -176,6 +176,14 @@ class TestSchema:
         assert result is not None
         assert "wal" in str(result.get("journal_mode", "")).lower()
 
+    def test_get_db_is_singleton(self, mock_data_dir):
+        """Verify get_db() returns the same instance on repeated calls."""
+        from A_organizi.data.storage import get_db
+
+        db1 = get_db()
+        db2 = get_db()
+        assert db1 is db2
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # CRUDService integration tests

@@ -11,6 +11,8 @@ from A.data.base import SQLiteDB, backup_db, health_check
 _DATA_DIR: Path = data_dir()
 _DB_FILE: Path = _DATA_DIR / "organizi.db"
 
+_db_instance: SQLiteDB | None = None
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Calendars (kalendaro)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -170,7 +172,20 @@ def ensure_dirs() -> None:
 
 
 def get_db() -> SQLiteDB:
-    """Get database connection with all tables and indexes created."""
+    """Get or create the shared database connection (singleton).
+
+    All callers within the same process share one ``SQLiteDB`` instance,
+    which uses one cached SQLite connection. This avoids WAL/SHM conflicts
+    that occur when multiple connections access the same database file.
+
+    The connection is lazily created on first call and cached in
+    ``_db_instance``. Tests can reset the singleton by setting
+    ``A_organizi.data.storage._db_instance = None`` in their teardown.
+    """
+    global _db_instance
+    if _db_instance is not None:
+        return _db_instance
+
     ensure_dirs()
     if not health_check(_DB_FILE):
         from A.data.base import repair_db as _repair
@@ -183,6 +198,7 @@ def get_db() -> SQLiteDB:
     for stmt in _CREATE_INDEXES:
         db.execute(stmt)
 
+    _db_instance = db
     return db
 
 
