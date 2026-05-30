@@ -199,22 +199,11 @@ def _get_evento_db():
 
 def _prompt_install_alien() -> None:
     """Prompt user to install A-lien if missing."""
-    confirm_text = tr_multi(
-        "A-lien estas bezonata por --retposto. Ĉu instali ĝin nun?",
-        "A-lien is required for --retposto. Install it now?",
-        "A-lien est requis pour --retposto. Installer maintenant ?",
-    )
-    answer = typer.confirm(confirm_text, default=True)
-    if not answer:
-        raise typer.Exit(1)
+    from A.utils.deps import ensure_dependency
 
-    import subprocess
-    import sys
     try:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "A-lien"],
-        )
-    except subprocess.CalledProcessError:
+        ensure_dependency("A_lien", "A-lien")
+    except ImportError:
         error(tr_multi(
             "Ne povis instali A-lien.",
             "Could not install A-lien.",

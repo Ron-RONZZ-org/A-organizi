@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
+import typer
 
 SAMPLE_ICS = """BEGIN:VCALENDAR
 VERSION:2.0
@@ -373,3 +374,23 @@ class TestImportIcsFromMessages:
         )
         assert "msg-empty" not in result
         assert "msg-ics" in result
+
+
+class TestPromptInstallAlien:
+    """_prompt_install_alien delegates to ensure_dependency."""
+
+    def test_calls_ensure_dependency(self) -> None:
+        """Calls ensure_dependency('A_lien', 'A-lien')."""
+        from A_organizi.cli.okazajo_retposto import _prompt_install_alien
+
+        with patch("A.utils.deps.ensure_dependency") as mock_ed:
+            _prompt_install_alien()
+            mock_ed.assert_called_once_with("A_lien", "A-lien")
+
+    def test_import_error_raises_exit(self) -> None:
+        """Raises typer.Exit(1) when ensure_dependency fails."""
+        from A_organizi.cli.okazajo_retposto import _prompt_install_alien
+
+        with patch("A.utils.deps.ensure_dependency", side_effect=ImportError("fail")):
+            with pytest.raises(typer.Exit, match="1"):
+                _prompt_install_alien()
