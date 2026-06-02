@@ -462,15 +462,15 @@ def reprovi_sync_job(
     job_id: str | None = None,
     calendar_uuid: str | None = None,
 ) -> int:
-    """Retry failed sync jobs synchronously.
+    """Retry failed or stuck-pending sync jobs synchronously.
 
-    Finds failed jobs matching the criteria and processes them immediately.
-    Unlike simply resetting to ``pending`` (which requires the background
-    worker to pick them up), this runs the job inline.
+    Finds unprocessed jobs (``failed`` or ``pending``) matching the
+    criteria and processes them immediately inline, rather than relying
+    on the background worker (which may not be running).
 
     Args:
         db: Database connection (``SQLiteDB`` instance).
-        job_id: Specific job ID to retry. If None, retries ALL failed jobs.
+        job_id: Specific job ID to retry. If None, retries ALL unprocessed jobs.
         calendar_uuid: Optional calendar filter (ignored if ``job_id`` set).
 
     Returns:
@@ -478,13 +478,13 @@ def reprovi_sync_job(
     """
     params: list[str] = []
     if job_id:
-        query = "SELECT * FROM sync_queue WHERE id = ? AND stato = 'failed'"
+        query = "SELECT * FROM sync_queue WHERE id = ? AND stato IN ('failed', 'pending')"
         params.append(job_id)
     elif calendar_uuid:
-        query = "SELECT * FROM sync_queue WHERE calendar_uuid = ? AND stato = 'failed'"
+        query = "SELECT * FROM sync_queue WHERE calendar_uuid = ? AND stato IN ('failed', 'pending')"
         params.append(calendar_uuid)
     else:
-        query = "SELECT * FROM sync_queue WHERE stato = 'failed'"
+        query = "SELECT * FROM sync_queue WHERE stato IN ('failed', 'pending')"
 
     jobs = db.execute(query, tuple(params))
     for job in jobs:

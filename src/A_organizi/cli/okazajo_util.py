@@ -197,9 +197,9 @@ def register_extra_commands(app: typer.Typer) -> None:
         job_id: Optional[str] = typer.Argument(
             None,
             help=tr_multi(
-                "Sinkroniga tasko ID por reprovi. Se ne donita, reprovas cxiujn malsukcesintajn.",
-                "Sync job ID to retry. If omitted, retries ALL failed jobs.",
-                "ID de la tâche à réessayer. Si omis, réessaye TOUTES les tâches échouées.",
+                "Sinkroniga tasko ID por reprovi. Se ne donita, reprovas cxiujn pretajn (pending) kaj malsukcesintajn.",
+                "Sync job ID to retry. If omitted, retries ALL pending and failed jobs.",
+                "ID de la tâche à réessayer. Si omis, réessaye TOUTES les tâches en attente et échouées.",
             ),
         ),
         kalendaro: Optional[str] = typer.Option(
@@ -211,7 +211,7 @@ def register_extra_commands(app: typer.Typer) -> None:
             ),
         ),
     ) -> None:
-        """Reprovi malsukcesintajn sinkronigajn taskojn."""
+        """Reprovi pretajn (pending) au malsukcesintajn sinkronigajn taskojn."""
         db = get_evento_service().db
 
         cal_uuid: str | None = None
