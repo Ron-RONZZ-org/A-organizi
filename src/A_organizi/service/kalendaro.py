@@ -236,6 +236,116 @@ class EventService(CRUDService):
 
         return filtered[:limit]
 
+    # ── Sync hooks ───────────────────────────────────────────────────────
+
+    def _post_create(self, data: dict[str, Any], result: dict[str, Any]) -> None:
+        """Enqueue a CalDAV push after local event creation.
+
+        Args:
+            data: The input data passed to create().
+            result: The created entry with generated UUID and timestamps.
+        """
+        self._enqueue_sync_for_event(result, "create")
+
+    def _post_update(
+        self, uuid: str, old_data: dict[str, Any] | None, new_data: dict[str, Any]
+    ) -> None:
+        """Enqueue a CalDAV push after local event update.
+
+        Uses ``old_data`` (full event before update) to determine calendar
+        ownership, then re-reads the full event from DB for the payload so
+        the push includes all fields.
+
+        Args:
+            uuid: Entry UUID.
+            old_data: The entry state before update (may be None).
+            new_data: Partial update dict (only changed fields).
+        """
+        if old_data is None:
+            return
+        # Re-read the full event post-update to capture all fields
+        full = self.db.execute_one(
+            "SELECT * FROM eventoj WHERE uuid = ?", (uuid,)
+        )
+        event_data = dict(full) if full else old_data
+        self._enqueue_sync_for_event(event_data, "update")
+
+    def _post_delete(self, uuid: str, data: dict[str, Any] | None, soft: bool) -> None:
+        """Enqueue a CalDAV push after local event deletion.
+
+        Args:
+            uuid: Entry UUID.
+            data: The entry data before deletion (None if not found).
+            soft: True if moved to trash, False if permanently deleted.
+        """
+        if data is not None:
+            self._enqueue_sync_for_event(data, "delete")
+
+    def _enqueue_sync_for_event(
+        self,
+        event_data: dict[str, Any],
+        operation: str,
+    ) -> None:
+        """Enqueue a CalDAV push job for an event mutation.
+
+        Silently skips if the owning calendar has no remote URL configured.
+        Starts the background worker on first enqueue.
+
+        Args:
+            event_data: The event dict (must include ``kalendaro_uuid`` and ``uuid``).
+            operation: One of ``"create"``, ``"update"``, ``"delete"``.
+        """
+        cal_uuid = event_data.get("kalendaro_uuid", "")
+        if not cal_uuid:
+            return
+
+        # Check whether the calendar is remote
+        cal = self.db.execute_one(
+            "SELECT remote, url FROM kalendaroj WHERE uuid = ?", (cal_uuid,)
+        )
+        if not cal or not cal.get("remote") or not cal.get("url", "").strip():
+            return  # Local-only calendar, nothing to push
+
+        with self.db.transaction() as conn:
+            from A_organizi.utils.sync import queue_sync
+            queue_sync(
+                conn,
+                calendar_uuid=cal_uuid,
+                operation="push",
+                payload={
+                    "event_uuid": event_data.get("uuid", ""),
+                    "operation": operation,
+                    "event_data": event_data,
+                },
+            )
+
+        # Ensure the background worker is running
+        from A_organizi.utils.sync import start_sync_worker
+        start_sync_worker()
+
+    def delete_by_date_range(
+        self,
+        start: date,
+        end: date,
+        calendar_uuids: list[str] | None = None,
+    ) -> int:
+        """Delete events in a date range, triggering ``_post_delete`` per event.
+
+        Args:
+            start: Start date (inclusive).
+            end: End date (inclusive).
+            calendar_uuids: Optional list of calendar UUIDs to filter by.
+
+        Returns:
+            Number of deleted events.
+        """
+        events = self.list_by_date_range(start, end, calendar_uuids)
+        count = 0
+        for event in events:
+            self.delete(event["uuid"], soft=False)
+            count += 1
+        return count
+
 
 def get_kalendaro_service() -> CalendarService:
     """Get the singleton CalendarService for kalendaroj table."""

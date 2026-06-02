@@ -9,9 +9,12 @@ import pytest
 def isolate_organizi(monkeypatch, tmp_path):
     """Isolate database to tmp_path to prevent real data pollution."""
     import A_organizi.data.storage as storage_module
+    import A_organizi.service.kalendaro as kalendaro_module
 
-    # Reset singleton to force fresh connection on each test
+    # Reset all singletons to force fresh connections on each test
     storage_module._db_instance = None
+    kalendaro_module._evento_service = None
+    kalendaro_module._kalendaro_service = None
 
     monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
     monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")

@@ -241,9 +241,31 @@ def sync_worker() -> None:
                 # TODO: Merge events into local database
                 info(f"[sync] Pulled {len(events)} events from {cal_uuid}")
             elif operacio == "push":
-                # Push events to remote
-                # TODO: Implement push logic
-                info(f"[sync] Push not yet implemented for {cal_uuid}")
+                # Push event changes to remote CalDAV server
+                sub_op = payload.get("operation", "")
+                event_uuid = payload.get("event_uuid", "")
+                event_data = payload.get("event_data")
+                if not event_uuid:
+                    raise ValueError("Push job missing event_uuid")
+
+                if sub_op == "delete":
+                    # Use stored event_data; event may already be gone from local DB
+                    delete_event_from_remote(url, username, password, event_uuid)
+                    info(f"[sync] Deleted {event_uuid[:8]} from {cal_uuid[:8]}")
+                else:
+                    # Re-read from DB to get latest data (catches subsequent edits)
+                    event = db.execute_one(
+                        "SELECT * FROM eventoj WHERE uuid = ?", (event_uuid,)
+                    )
+                    if event:
+                        from A_organizi.utils.ics import events_to_ics
+                        ics_payload = events_to_ics([dict(event)])
+                        push_event_to_remote(url, username, password, ics_payload, event_uuid)
+                        info(f"[sync] Pushed {event_uuid[:8]} ({sub_op}) to {cal_uuid[:8]}")
+                    else:
+                        # Event deleted before push ran — try DELETE on remote
+                        delete_event_from_remote(url, username, password, event_uuid)
+                        info(f"[sync] Event {event_uuid[:8]} gone locally, deleted remotely")
             else:
                 raise ValueError(f"Unknown operation: {operacio}")
 
@@ -257,6 +279,74 @@ def sync_worker() -> None:
                 "UPDATE sync_queue SET stato = 'failed', eraro = ? WHERE id = ?",
                 (str(exc), job_id),
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CalDAV push helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def push_event_to_remote(
+    url: str,
+    username: str,
+    password: str,
+    ics_payload: str,
+    event_uuid: str,
+) -> int:
+    """PUT an ICS event to the remote CalDAV server.
+
+    Args:
+        url: Base calendar URL.
+        username: Username for Basic auth.
+        password: Password for Basic auth.
+        ics_payload: Full ICS text (VCALENDAR wrapper).
+        event_uuid: Event UUID used as the resource name.
+
+    Returns:
+        HTTP status code (200, 201, or 204 on success).
+
+    Raises:
+        RuntimeError: If the server returns an unexpected status.
+    """
+    put_url = url.rstrip("/") + f"/{event_uuid}.ics"
+    headers = {
+        "Content-Type": "text/calendar; charset=utf-8",
+    }
+    status, _ = http_fetch_text(
+        put_url, username, password, "PUT", ics_payload, headers
+    )
+    if status not in (200, 201, 204):
+        raise RuntimeError(f"CalDAV PUT failed: HTTP {status}")
+    return status
+
+
+def delete_event_from_remote(
+    url: str,
+    username: str,
+    password: str,
+    event_uuid: str,
+) -> int:
+    """DELETE an event from the remote CalDAV server.
+
+    Args:
+        url: Base calendar URL.
+        username: Username for Basic auth.
+        password: Password for Basic auth.
+        event_uuid: Event UUID used as the resource name.
+
+    Returns:
+        HTTP status code (200 or 204 on success; 404 is accepted as "already gone").
+
+    Raises:
+        RuntimeError: If the server returns an unexpected status.
+    """
+    delete_url = url.rstrip("/") + f"/{event_uuid}.ics"
+    status, _ = http_fetch_text(
+        delete_url, username, password, "DELETE"
+    )
+    if status not in (200, 204, 404):
+        raise RuntimeError(f"CalDAV DELETE failed: HTTP {status}")
+    return status
 
 
 def start_sync_worker() -> None:
@@ -367,6 +457,8 @@ __all__ = [
     "fetch_remote_calendar_payloads",
     "probe_calendar_config",
     "queue_sync",
+    "push_event_to_remote",
+    "delete_event_from_remote",
     "sync_worker",
     "start_sync_worker",
     "set_password",

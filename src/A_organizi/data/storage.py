@@ -163,6 +163,7 @@ _CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_taglibro_titolo_norm ON taglibro(titolo_norm);",
     "CREATE INDEX IF NOT EXISTS idx_taglibro_priskribo_norm ON taglibro(priskribo_norm);",
     "CREATE INDEX IF NOT EXISTS idx_etikedoj_teksto_norm ON etikedoj(teksto_norm);",
+    "CREATE INDEX IF NOT EXISTS idx_sync_queue_calendar_stato ON sync_queue(calendar_uuid, stato);",
 ]
 
 
