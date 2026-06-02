@@ -42,9 +42,11 @@ src/A_organizi/
 │   ├── todo.py       # todo commands
 │   ├── taglibro.py   # taglibro commands
 │   ├── kalendaro.py  # kalendaro (calendar management) commands
-│   ├── okazajo.py         # okazajo (event management) CRUD commands
-│   ├── okazajo_retposto.py # Retposto import helpers (split from okazajo.py for 500-line limit)
-│   └── okazajo_util.py    # Event utilities (ICS import/export, sync, undo)
+│   ├── okazajo.py              # okazajo aldoni + helpers (<500 lines)
+│   ├── okazajo_crud.py         # CRUD commands: ls, vidi, serci, modifi, forigi
+│   ├── okazajo_retposto.py     # Retposto import helpers (split from okazajo.py for 500-line limit)
+│   ├── okazajo_rrule.py        # RRULE validator + shorthand expander (RFC 5545)
+│   └── okazajo_util.py         # Event utilities (ICS import/export, sync, undo)
 ├── utils/
 │   ├── __init__.py
 │   ├── labels.py          # Shared label helpers (resolve_refs, parse_blob, etc.)
@@ -158,6 +160,8 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #24 | ✅ Done | todo forigi: per-item resolution and confirmation for multi-identifier input |
 | #26 | ✅ Done | get_db() singleton caching + conftest A_DIR isolation |
 | #29 | ✅ Done | Auto-sync push: events auto-push to CalDAV server on create/update/delete |
+| #30 | ✅ Done | okazajo aldoni UX: optional -k, date+time split, RRULE validation |
+| #31 | ✅ Done | PR merged — implementation of #30 |
 
 ## Migration from autish
 
