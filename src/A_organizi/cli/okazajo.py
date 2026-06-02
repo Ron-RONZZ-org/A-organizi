@@ -1,18 +1,26 @@
-"""CLI commands for okazajo (event management within calendars)."""
+"""CLI commands for okazajo (event management within calendars).
+
+Kept under 500 lines by splitting CRUD commands into okazajo_crud.py
+and RRULE utilities into okazajo_rrule.py.
+"""
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional
 
 import typer
-from rich.table import Table
 
 from A import error, info, tr_multi
-from A.utils.date import parse_partial_date, parse_partial_datetime
-from A.utils.output import console, print_table
+from A.utils.output import console
 
-from A_organizi.service.kalendaro import get_evento_service, get_kalendaro_service
+from A_organizi.service.kalendaro import (
+    CalendarService,
+    get_evento_service,
+    get_kalendaro_service,
+)
+
+# ── Typer app ────────────────────────────────────────────────────────────────
 
 okazajo_app = typer.Typer(
     name="okazajo",
@@ -24,7 +32,6 @@ okazajo_app = typer.Typer(
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help", "--helpo"]},
 )
-
 
 # ── Display helpers ──────────────────────────────────────────────────────────
 
@@ -56,26 +63,177 @@ def _short(text: str, limit: int = 40) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-# ── Event CRUD ───────────────────────────────────────────────────────────────
+# ── Event helpers ────────────────────────────────────────────────────────────
+
+
+def _resolve_calendar(
+    cal_svc: CalendarService,
+    ref: str | None,
+) -> str | None:
+    """Resolve calendar reference or auto-select interactively.
+
+    Args:
+        cal_svc: CalendarService instance.
+        ref: User-provided reference (UUID or prefix), or None for auto.
+
+    Returns:
+        Calendar UUID string, or None if not found / no selection.
+    """
+    if ref:
+        cal_uuid = cal_svc.resolve_uuid(ref)
+        if not cal_uuid:
+            error(tr_multi(
+                f"Kalendaro ne trovita: {ref}",
+                f"Calendar not found: {ref}",
+                f"Calendrier non trouvé: {ref}",
+            ))
+        return cal_uuid
+
+    calendars = cal_svc.list()
+    if not calendars:
+        error(tr_multi(
+            "Neniu kalendaro. Unue kreu kalendaron per "
+            "'A organizi kalendaro aldoni'.",
+            "No calendar. First create one with "
+            "'A organizi kalendaro aldoni'.",
+            "Aucun calendrier. Créez-en un avec "
+            "'A organizi kalendaro aldoni'.",
+        ))
+        return None
+
+    if len(calendars) == 1:
+        c = calendars[0]
+        info(tr_multi(
+            f"Uzas kalendaron #{c['uuid'][:8]}",
+            f"Using calendar #{c['uuid'][:8]}",
+            f"Utilise le calendrier #{c['uuid'][:8]}",
+        ))
+        return c["uuid"]
+
+    # Multiple calendars — interactive selection
+    from A.utils.interactive import select_candidate as _sel
+
+    result = _sel(
+        calendars,
+        columns=[
+            {"header": "UUID", "style": "cyan", "width": 10},
+            {"header": "URL"},
+        ],
+        row_formatter=lambda c, i: [
+            str(c["uuid"])[:8], str(c.get("url", ""))[:60]
+        ],
+        prompt_text=tr_multi(
+            "Elektu kalendaron por la evento:",
+            "Select calendar for the event:",
+            "Choisissez le calendrier pour l'événement :",
+        ),
+    )
+    if result is None:
+        error(tr_multi(
+            "Neniu kalendaro elektita.",
+            "No calendar selected.",
+            "Aucun calendrier sélectionné.",
+        ))
+        return None
+    _, cal = result
+    return cal["uuid"]
+
+
+def _combine_date_time(
+    dato: str,
+    komenco: str | None,
+    fino: str | None,
+    dato_gis: str | None,
+) -> tuple[str, str]:
+    """Combine date and time strings into ISO 8601 datetimes (UTC).
+
+    ``dato_gis`` is an optional explicit end date for multi-day events.
+    When ``fino < komenco`` and no ``dato_gis`` is given, the end date
+    is automatically advanced to the next day (cross-midnight).
+
+    Args:
+        dato: Start date (YYYYMMDD or YYYY-MM-DD).
+        komenco: Start time (HHMM, default ``"0000"``).
+        fino: End time (HHMM, default ``"2359"``).
+        dato_gis: Optional end date for multi-day events.
+
+    Returns:
+        Tuple of (komenco_iso, fino_iso) ISO 8601 strings.
+
+    Raises:
+        ValueError: If date or time format is invalid.
+    """
+    from datetime import datetime as _dt, timedelta
+
+    from A.utils.date import parse_partial_datetime
+
+    dato_clean = dato.strip().replace("-", "")
+    km = (komenco or "0000").strip()
+    fn = (fino or "2359").strip()
+
+    start_token = f"{dato_clean}_{km}"
+
+    if dato_gis:
+        dg = dato_gis.strip().replace("-", "")
+        end_token = f"{dg}_{fn}"
+    elif fn < km:
+        # Cross-midnight — advance end date by one day
+        d = _dt.strptime(dato_clean, "%Y%m%d")
+        d2 = d + timedelta(days=1)
+        end_token = f"{d2.strftime('%Y%m%d')}_{fn}"
+    else:
+        end_token = f"{dato_clean}_{fn}"
+
+    return (
+        parse_partial_datetime(start_token),
+        parse_partial_datetime(end_token),
+    )
+
+
+# ── aldoni (event creation) ──────────────────────────────────────────────────
 
 
 @okazajo_app.command()
 def aldoni(
-    kalendaro: str = typer.Option(
-        ..., "--kalendaro", "-k",
+    kalendaro: Optional[str] = typer.Option(
+        None, "--kalendaro", "-k",
         help=tr_multi("Kalendaro UUID.", "Calendar UUID.", "UUID du calendrier."),
     ),
     titolo: Optional[str] = typer.Option(
         None, "--titolo", "-t",
         help=tr_multi("Titolo de evento.", "Event title.", "Titre de l'événement."),
     ),
+    dato: Optional[str] = typer.Option(
+        None, "--dato", "-d",
+        help=tr_multi(
+            "Dato (YYYYMMDD aŭ YYYY-MM-DD).",
+            "Date (YYYYMMDD or YYYY-MM-DD).",
+            "Date (AAAAMMJJ ou AAAA-MM-JJ).",
+        ),
+    ),
     komenco: Optional[str] = typer.Option(
         None, "--komenco",
-        help=tr_multi("Komenca dato (YYYYMMDD aŭ YYYY-MM-DD).", "Start date (YYYYMMDD or YYYY-MM-DD).", "Date de début (AAAAMMJJ ou AAAA-MM-JJ)."),
+        help=tr_multi(
+            "Komenca horo (HHMM, defaŭlte 0000).",
+            "Start time (HHMM, default 0000).",
+            "Heure de début (HHMM, défaut 0000).",
+        ),
     ),
     fino: Optional[str] = typer.Option(
         None, "--fino",
-        help=tr_multi("Fina dato (YYYYMMDD aŭ YYYY-MM-DD).", "End date (YYYYMMDD or YYYY-MM-DD).", "Date de fin (AAAAMMJJ ou AAAA-MM-JJ)."),
+        help=tr_multi(
+            "Fina horo (HHMM, defaŭlte 2359).",
+            "End time (HHMM, default 2359).",
+            "Heure de fin (HHMM, défaut 2359).",
+        ),
+    ),
+    dato_gis: Optional[str] = typer.Option(
+        None, "--dato-gis",
+        help=tr_multi(
+            "Fina dato por plurtaga evento.",
+            "End date for multi-day event.",
+            "Date de fin pour événement multi-jours.",
+        ),
     ),
     loko: Optional[str] = typer.Option(
         None, "--loko", "-l",
@@ -91,7 +249,11 @@ def aldoni(
     ),
     ripeto: Optional[str] = typer.Option(
         None, "--ripeto", "-r",
-        help=tr_multi("Ripeto (ekz: daily, weekly).", "Recurrence (e.g. daily, weekly).", "Récurrence (ex: daily, weekly)."),
+        help=tr_multi(
+            "Ripeto (RRULE, ekz: FREQ=DAILY).",
+            "Recurrence (RRULE, e.g. FREQ=DAILY).",
+            "Récurrence (RRULE, ex: FREQ=DAILY).",
+        ),
     ),
     retposto: Optional[list[str]] = typer.Option(
         None, "--retposto", "-R",
@@ -104,13 +266,8 @@ def aldoni(
 ) -> None:
     """Aldoni novan eventon al kalendaro."""
     cal_svc = get_kalendaro_service()
-    cal_uuid = cal_svc.resolve_uuid(kalendaro)
+    cal_uuid = _resolve_calendar(cal_svc, kalendaro)
     if not cal_uuid:
-        error(tr_multi(
-            f"Kalendaro ne trovita: {kalendaro}",
-            f"Calendar not found: {kalendaro}",
-            f"Calendrier non trouvé: {kalendaro}",
-        ))
         raise typer.Exit(1)
 
     # ── Retposto workflow: import .ics from email attachments ────────────
@@ -118,27 +275,28 @@ def aldoni(
         _import_from_retposto(
             cal_uuid=cal_uuid,
             message_uuids=retposto,
-            overrides=_build_overrides(titolo, komenco, fino, loko, kategorio, priskribo, ripeto),
+            overrides=_build_overrides(
+                titolo, loko, kategorio, priskribo, ripeto,
+            ),
         )
         return
 
     # ── Traditional single-event workflow ─────────────────────────────────
-    if titolo is None or komenco is None or fino is None:
+    if titolo is None or dato is None:
         error(tr_multi(
-            "Bezonata --titolo, --komenco kaj --fino (aŭ uzu --retposto/-R).",
-            "--titolo, --komenco and --fino required (or use --retposto/-R).",
-            "--titolo, --komenco et --fino requis (ou utilisez --retposto/-R).",
+            "Bezonata --titolo, --dato (aŭ uzu --retposto/-R).",
+            "--titolo and --dato required (or use --retposto/-R).",
+            "--titolo et --dato requis (ou utilisez --retposto/-R).",
         ))
         raise typer.Exit(1)
 
     try:
-        komenco_dt = parse_partial_datetime(komenco)
-        fino_dt = parse_partial_datetime(fino)
+        komenco_dt, fino_dt = _combine_date_time(dato, komenco, fino, dato_gis)
     except ValueError as exc:
         error(str(exc))
         raise typer.Exit(1) from exc
 
-    data = {
+    data: dict[str, str] = {
         "kalendaro_uuid": cal_uuid,
         "titolo": titolo.strip(),
         "komenco": komenco_dt,
@@ -151,315 +309,30 @@ def aldoni(
     if priskribo:
         data["priskribo"] = priskribo.strip()
     if ripeto:
-        data["ripeto"] = ripeto.strip()
+        from A_organizi.cli.okazajo_rrule import normalize_rrule as _norm
+
+        try:
+            data["ripeto"] = _norm(ripeto)
+        except ValueError as exc:
+            error(str(exc))
+            raise typer.Exit(1) from exc
 
     svc = get_evento_service()
     result = svc.create(data)
     info(f"Aldonis eventon #{result['uuid'][:8]}: {titolo}")
 
 
-# ── Retposto import (defined in okazajo_retposto.py) ────────────────────────
+# ── Import from sub-modules ──────────────────────────────────────────────────
 
+# Retposto import helpers
 from A_organizi.cli.okazajo_retposto import _build_overrides, _import_from_retposto
 
+# CRUD commands (ls, vidi, serci, modifi, forigi, amase_forigi)
+from A_organizi.cli.okazajo_crud import register_crud_commands
 
-@okazajo_app.command()
-def ls(
-    dato1: Optional[str] = typer.Argument(
-        None, help=tr_multi("Komenca dato (YYYYMMDD/MMDD/DD).", "Start date (YYYYMMDD/MMDD/DD).", "Date de début (AAAAMMJJ/MMJJ/JJ)."),
-    ),
-    dato2: Optional[str] = typer.Argument(
-        None, help=tr_multi("Fina dato (opcia).", "End date (optional).", "Date de fin (optionnelle)."),
-    ),
-    kalendaro: Optional[list[str]] = typer.Option(
-        None, "-k", "--kalendaro",
-        help=tr_multi("Filtri laŭ kalendaro UUID.", "Filter by calendar UUID.", "Filtrer par UUID du calendrier."),
-    ),
-) -> None:
-    """Montri eventojn en datintervalo."""
-    today = date.today()
-    start = parse_partial_date(dato1, ref=today) if dato1 else today
-    end = parse_partial_date(dato2, ref=today) if dato2 else start
-    if end < start:
-        start, end = end, start
+register_crud_commands(okazajo_app)
 
-    svc = get_evento_service()
-    cal_svc = get_kalendaro_service()
-    cal_uuids: list[str] = []
-    if kalendaro:
-        for ref in kalendaro:
-            uid = cal_svc.resolve_uuid(ref)
-            if uid:
-                cal_uuids.append(uid)
-
-    rows = svc.list_by_date_range(start, end, cal_uuids or None)
-    if not rows:
-        info(tr_multi("Neniu evento trovita.", "No events found.", "Aucun événement trouvé."))
-        return
-
-    table = Table()
-    table.add_column("UUID", style="cyan", width=10)
-    table.add_column("Titolo")
-    table.add_column("Dato", width=12)
-    table.add_column("Komenco", width=8)
-    table.add_column("Fino", width=8)
-    table.add_column("Kalendaro", width=10)
-    for row in rows:
-        table.add_row(
-            str(row["uuid"])[:8],
-            _short(str(row.get("titolo") or ""), 40),
-            _fmt_date(str(row["komenco"])),
-            _fmt_hhmm(str(row["komenco"])),
-            _fmt_hhmm(str(row["fino"])),
-            str(row.get("kalendaro_uuid") or "")[:8],
-        )
-    console.print(table)
-
-
-@okazajo_app.command()
-def vidi(
-    eventoj: list[str] = typer.Argument(
-        ..., help=tr_multi("UUID(j) de evento(j).", "Event UUID(s).", "UUID de l'événement."),
-    ),
-) -> None:
-    """Montri detalojn de unu au pluraj eventoj."""
-    svc = get_evento_service()
-    for ref in eventoj:
-        uid = svc.resolve_uuid(ref)
-        if not uid:
-            error(f"Evento ne trovita: {ref}")
-            continue
-        row = svc.get(uid)
-        if not row:
-            continue
-        console.print(f"|{row['uuid'][:8]}|{_fmt_date(str(row['komenco']))}|"
-                      f"{str(row['kalendaro_uuid'])[:8]}|")
-        console.print(f"|{_fmt_hhmm(str(row['komenco']))}|{_fmt_hhmm(str(row['fino']))}|")
-        console.print(f"|{str(row.get('kategorio') or '')}|{str(row.get('loko') or '')}|")
-        console.print(f"|{str(row.get('ripeto') or 'ne')}|")
-        console.print(f"|{str(row.get('titolo') or '')}|")
-        console.print(f"|{str(row.get('priskribo') or '')}|")
-        console.print("")
-
-
-@okazajo_app.command()
-def serci(
-    demando: Optional[str] = typer.Argument(
-        None, help=tr_multi("Serĉ-demando (titolo/priskribo).", "Search query (title/description).", "Requête de recherche (titre/description)."),
-    ),
-    kalendaro: Optional[list[str]] = typer.Option(
-        None, "-k", "--kalendaro",
-        help=tr_multi("Filtri laŭ kalendaro UUID.", "Filter by calendar UUID.", "Filtrer par UUID du calendrier."),
-    ),
-    kategorio: Optional[str] = typer.Option(
-        None, "--kategorio", help=tr_multi("Filtri laŭ kategorio.", "Filter by category.", "Filtrer par catégorie."),
-    ),
-    loko: Optional[str] = typer.Option(
-        None, "--loko", help=tr_multi("Filtri laŭ loko.", "Filter by location.", "Filtrer par lieu."),
-    ),
-    dato_de: Optional[str] = typer.Option(
-        None, "--dato-de", help=tr_multi("Komenca dato (YYYYMMDD).", "Start date (YYYYMMDD).", "Date de début (AAAAMMJJ)."),
-    ),
-    dato_gis: Optional[str] = typer.Option(
-        None, "--dato-gis", help=tr_multi("Fina dato (YYYYMMDD).", "End date (YYYYMMDD).", "Date de fin (AAAAMMJJ)."),
-    ),
-    limo: int = typer.Option(
-        50, "--limo", "-l", help=tr_multi("Maksimuma nombro da rezultoj.", "Max results.", "Nombre max de résultats."),
-    ),
-) -> None:
-    """Serĉi eventojn kun kombineblaj filtriloj."""
-    svc = get_evento_service()
-
-    de_iso: Optional[str] = None
-    gis_iso: Optional[str] = None
-    try:
-        if dato_de:
-            de_iso = parse_partial_datetime(dato_de)
-        if dato_gis:
-            gis_iso = parse_partial_datetime(dato_gis)
-    except ValueError as exc:
-        error(str(exc))
-        raise typer.Exit(1) from exc
-
-    results = svc.search(
-        query=demando,
-        kalendaro=kalendaro,
-        kategorio=kategorio,
-        loko=loko,
-        dato_de=de_iso,
-        dato_gxis=gis_iso,
-        limit=limo,
-    )
-
-    if not results:
-        info(tr_multi("Neniu rezulto.", "No results.", "Aucun résultat."))
-        return
-
-    table = Table()
-    table.add_column("UUID", style="cyan", width=10)
-    table.add_column("Titolo")
-    table.add_column("Dato", width=12)
-    table.add_column("Komenco", width=8)
-    table.add_column("Fino", width=8)
-    table.add_column("Kalendaro", width=10)
-    for row in results:
-        table.add_row(
-            str(row["uuid"])[:8],
-            _short(str(row.get("titolo") or ""), 40),
-            _fmt_date(str(row["komenco"])),
-            _fmt_hhmm(str(row["komenco"])),
-            _fmt_hhmm(str(row["fino"])),
-            str(row.get("kalendaro_uuid") or "")[:8],
-        )
-    console.print(table)
-
-
-@okazajo_app.command()
-def modifi(
-    evento_uuid: str = typer.Argument(
-        ..., help=tr_multi("UUID de evento.", "Event UUID.", "UUID de l'événement."),
-    ),
-    titolo: Optional[str] = typer.Option(
-        None, "--titolo", "-t", help=tr_multi("Nova titolo.", "New title.", "Nouveau titre."),
-    ),
-    komenco: Optional[str] = typer.Option(
-        None, "--komenco", help=tr_multi("Nova komenca dato (YYYYMMDD).", "New start date (YYYYMMDD).", "Nouvelle date de début (AAAAMMJJ)."),
-    ),
-    fino: Optional[str] = typer.Option(
-        None, "--fino", help=tr_multi("Nova fina dato (YYYYMMDD).", "New end date (YYYYMMDD).", "Nouvelle date de fin (AAAAMMJJ)."),
-    ),
-    loko: Optional[str] = typer.Option(
-        None, "--loko", "-l", help=tr_multi("Nova loko.", "New location.", "Nouveau lieu."),
-    ),
-    kategorio: Optional[str] = typer.Option(
-        None, "--kategorio", "-c", help=tr_multi("Nova kategorio.", "New category.", "Nouvelle catégorie."),
-    ),
-    priskribo: Optional[str] = typer.Option(
-        None, "--priskribo", "-p", help=tr_multi("Nova priskribo.", "New description.", "Nouvelle description."),
-    ),
-    kalendaro: Optional[str] = typer.Option(
-        None, "--kalendaro", "-k", help=tr_multi("Nova kalendaro UUID.", "New calendar UUID.", "Nouvel UUID du calendrier."),
-    ),
-) -> None:
-    """Modifi eventon laŭ UUID."""
-    svc = get_evento_service()
-    uid = svc.resolve_uuid(evento_uuid)
-    if not uid:
-        error(tr_multi(f"Evento ne trovita: {evento_uuid}", f"Event not found: {evento_uuid}", f"Événement non trouvé: {evento_uuid}"))
-        raise typer.Exit(1)
-
-    data: dict[str, str] = {}
-    if titolo is not None:
-        data["titolo"] = titolo.strip()
-    if komenco is not None:
-        try:
-            data["komenco"] = parse_partial_datetime(komenco)
-        except ValueError as exc:
-            error(str(exc))
-            raise typer.Exit(1) from exc
-    if fino is not None:
-        try:
-            data["fino"] = parse_partial_datetime(fino)
-        except ValueError as exc:
-            error(str(exc))
-            raise typer.Exit(1) from exc
-    if loko is not None:
-        data["loko"] = loko.strip()
-    if kategorio is not None:
-        data["kategorio"] = kategorio.strip()
-    if priskribo is not None:
-        data["priskribo"] = priskribo.strip()
-    if kalendaro is not None:
-        cal_svc = get_kalendaro_service()
-        cal_uid = cal_svc.resolve_uuid(kalendaro)
-        if not cal_uid:
-            error(tr_multi(f"Kalendaro ne trovita: {kalendaro}", f"Calendar not found: {kalendaro}", f"Calendrier non trouvé: {kalendaro}"))
-            raise typer.Exit(1)
-        data["kalendaro_uuid"] = cal_uid
-
-    if not data:
-        error(tr_multi("Neniu ŝanĝo specifita.", "No change specified.", "Aucun changement spécifié."))
-        raise typer.Exit(1)
-
-    svc.update(uid, data)
-    info(f"Modifis eventon #{uid[:8]}.")
-
-
-@okazajo_app.command()
-def forigi(
-    eventoj: list[str] = typer.Argument(
-        ..., help=tr_multi("Evento UUID(j) por forigi.", "Event UUID(s) to delete.", "UUID de l'événement à supprimer."),
-    ),
-) -> None:
-    """Forigi eventojn laŭ UUID."""
-    svc = get_evento_service()
-    uuids: list[str] = []
-    for ref in eventoj:
-        uid = svc.resolve_uuid(ref)
-        if uid:
-            uuids.append(uid)
-    if not uuids:
-        error(tr_multi("Neniu valida evento.", "No valid event.", "Aucun événement valide."))
-        raise typer.Exit(1)
-
-    rows = [svc.get(uid) for uid in uuids if svc.get(uid)]
-    for row in rows[:10]:
-        console.print(f" - #{row['uuid'][:8]} {_fmt_date(str(row['komenco']))} {str(row.get('titolo') or '')}")
-    answer = typer.prompt(tr_multi("Ĉu daŭrigi? (j/N)", "Continue? (j/N)", "Continuer ? (j/N)"), default="N")
-    if answer.strip().lower() not in {"j", "jes", "y", "yes"}:
-        info(tr_multi("Nuligita.", "Cancelled.", "Annulé."))
-        return
-
-    for uid in uuids:
-        svc.delete(uid, soft=False)
-    info(f"Forigis {len(uuids)} evento(j)n.")
-
-
-# ── Bulk operations ──────────────────────────────────────────────────────────
-
-
-@okazajo_app.command()
-def amase_forigi(
-    dato1: str = typer.Argument(..., help=tr_multi("Komenca dato (YYYYMMDD).", "Start date (YYYYMMDD).", "Date de début (AAAAMMJJ).")),
-    dato2: str = typer.Argument(..., help=tr_multi("Fina dato (YYYYMMDD).", "End date (YYYYMMDD).", "Date de fin (AAAAMMJJ).")),
-    kalendaro: Optional[list[str]] = typer.Option(
-        None, "-k", "--kalendaro",
-        help=tr_multi("Filtri laŭ kalendaro UUID.", "Filter by calendar UUID.", "Filtrer par UUID du calendrier."),
-    ),
-) -> None:
-    """Forigi eventojn en intervalo."""
-    today = date.today()
-    start = parse_partial_date(dato1, ref=today)
-    end = parse_partial_date(dato2, ref=today)
-    if end < start:
-        start, end = end, start
-
-    svc = get_evento_service()
-    cal_svc = get_kalendaro_service()
-    cal_uuids: list[str] = []
-    if kalendaro:
-        for ref in kalendaro:
-            uid = cal_svc.resolve_uuid(ref)
-            if uid:
-                cal_uuids.append(uid)
-
-    preview = svc.list_by_date_range(start, end, cal_uuids or None)
-    if not preview:
-        info(tr_multi("Neniu evento trovita.", "No events found.", "Aucun événement trouvé."))
-        return
-
-    for row in preview[:10]:
-        console.print(f" - #{row['uuid'][:8]} {_fmt_date(str(row['komenco']))} {str(row.get('titolo') or '')}")
-    answer = typer.prompt(tr_multi("Ĉu daŭrigi? (j/N)", "Continue? (j/N)", "Continuer ? (j/N)"), default="N")
-    if answer.strip().lower() not in {"j", "jes", "y", "yes"}:
-        info(tr_multi("Nuligita.", "Cancelled.", "Annulé."))
-        return
-
-    deleted = svc.delete_by_date_range(start, end, cal_uuids or None)
-    info(f"Forigis {deleted} evento(j)n.")
-
-
-# Register extended commands (ICS import/export, sync, undo)
+# Extended commands (ICS import/export, sync, undo)
 from A_organizi.cli.okazajo_util import register_extra_commands
 
 register_extra_commands(okazajo_app)

@@ -14,8 +14,6 @@ from A import error, info, tr_multi, warning
 
 def _build_overrides(
     titolo: str | None,
-    komenco: str | None,
-    fino: str | None,
     loko: str | None,
     kategorio: str | None,
     priskribo: str | None,
@@ -23,16 +21,15 @@ def _build_overrides(
 ) -> dict[str, str]:
     """Build overrides dict from CLI flags, excluding None values.
 
+    Only the fields mapped in ``retposto_ics._apply_overrides`` are
+    included (``komenco`` / ``fino`` are ignored by that function).
+
     Returns:
         Dict with only the flags the user explicitly provided.
     """
     d: dict[str, str] = {}
     if titolo is not None:
         d["titolo"] = titolo.strip()
-    if komenco is not None:
-        d["komenco"] = komenco.strip()
-    if fino is not None:
-        d["fino"] = fino.strip()
     if loko is not None:
         d["loko"] = loko.strip()
     if kategorio is not None:
