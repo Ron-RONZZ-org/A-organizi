@@ -425,5 +425,299 @@ class TestKalendaroCLI:
             assert cmd in result.output, f"Missing okazajo command: {cmd}"
 
 
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Okazajo CLI tests (new UX: optional -k, date+time split, RRULE)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestOkazajoAldoniCLI:
+    """Tests for okazajo aldoni with new UX (date+time split, RRULE)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, tmp_path):
+        """Patch data dir, reset singletons, mock network calls."""
+        import A_organizi.data.storage as storage_module
+        import A_organizi.service.kalendaro as kal_svc
+
+        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
+        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
+        monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
+        monkeypatch.setattr(kal_svc, "_evento_service", None)
+
+        import A_organizi.cli.kalendaro as kal_cli
+        monkeypatch.setattr(kal_cli, "probe_calendar_config",
+                            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"})
+        monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
+
+    def _add_calendar(self, runner, app, url="https://cal.ics"):
+        """Add a calendar and return its full UUID from DB."""
+        from A_organizi.service.kalendaro import get_kalendaro_service
+        svc = get_kalendaro_service()
+        result = svc.create({"url": url, "username": "u", "remote": 0})
+        return result["uuid"]
+
+    def test_aldoni_requires_titolo_and_dato(self):
+        """Without --titolo and --dato, should fail."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        # With -k but no --titolo or --dato
+        result = runner.invoke(app, [
+            "okazajo", "aldoni", "-k", cal_uuid[:8],
+        ])
+        assert result.exit_code != 0
+        assert "titolo" in result.output.lower() or "dato" in result.output.lower()
+
+    def test_aldoni_with_explicit_calendar(self):
+        """Basic event creation with explicit -k, --dato and --komenco/--fino."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        result = runner.invoke(app, [
+            "okazajo", "aldoni",
+            "-k", cal_uuid[:8],
+            "--titolo", "Test Event",
+            "--dato", "20260602",
+            "--komenco", "1000",
+            "--fino", "1130",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Aldonis" in result.output
+        assert "Test Event" in result.output
+
+    def test_aldoni_with_single_calendar_auto(self):
+        """With exactly one calendar, -k should be optional (auto-select)."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        self._add_calendar(runner, app)
+
+        result = runner.invoke(app, [
+            "okazajo", "aldoni",
+            "--titolo", "Auto Event",
+            "--dato", "20260602",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Aldonis" in result.output
+
+    def test_aldoni_with_rrule_shorthand(self):
+        """RRULE shorthand 'daily' should expand to FREQ=DAILY."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        result = runner.invoke(app, [
+            "okazajo", "aldoni",
+            "-k", cal_uuid[:8],
+            "--titolo", "Daily Standup",
+            "--dato", "20260602",
+            "--komenco", "0900",
+            "--fino", "0915",
+            "--ripeto", "daily",
+        ])
+        assert result.exit_code == 0, result.output
+
+        # Verify RRULE was stored
+        from A_organizi.service.kalendaro import get_evento_service
+        events = get_evento_service().list()
+        assert len(events) == 1
+        assert events[0]["ripeto"] == "FREQ=DAILY"
+
+    def test_aldoni_with_invalid_rrule(self):
+        """Invalid RRULE should be rejected."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        result = runner.invoke(app, [
+            "okazajo", "aldoni",
+            "-k", cal_uuid[:8],
+            "--titolo", "Bad RRULE",
+            "--dato", "20260602",
+            "--ripeto", "FREQ=HOURLY",
+        ])
+        assert result.exit_code != 0
+
+    def test_aldoni_cross_midnight(self):
+        """When fino < komenco, end date auto-advances (cross-midnight).
+
+        The `fino` ISO string must be strictly greater than `komenco`
+        in UTC, confirming the date was advanced.
+        """
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        result = runner.invoke(app, [
+            "okazajo", "aldoni",
+            "-k", cal_uuid[:8],
+            "--titolo", "Late Event",
+            "--dato", "20260602",
+            "--komenco", "2200",
+            "--fino", "0100",
+        ])
+        assert result.exit_code == 0, result.output
+
+        from A_organizi.service.kalendaro import get_evento_service
+        events = get_evento_service().list()
+        assert len(events) == 1
+        # Both are UTC — fino must be > komenco (cross-midnight worked)
+        assert events[0]["fino"] > events[0]["komenco"], (
+            f"Expected fino > komenco, got komenco={events[0]['komenco']} "
+            f"fino={events[0]['fino']}"
+        )
+
+    def test_aldoni_multi_day(self):
+        """Multi-day event with explicit --dato-gis."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        result = runner.invoke(app, [
+            "okazajo", "aldoni",
+            "-k", cal_uuid[:8],
+            "--titolo", "Multi-Day",
+            "--dato", "20260602",
+            "--komenco", "1000",
+            "--dato-gis", "20260605",
+            "--fino", "1800",
+        ])
+        assert result.exit_code == 0, result.output
+
+        from A_organizi.service.kalendaro import get_evento_service
+        events = get_evento_service().list()
+        assert len(events) == 1
+        assert "2026-06-05" in events[0]["fino"]
+
+    def test_help_shows_new_options(self):
+        """Help text should show the new --dato and --ripeto with RRULE."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "aldoni", "--help"])
+        assert result.exit_code == 0
+        assert "--dato" in result.output
+        assert "--dato-gis" in result.output
+        assert "--ripeto" in result.output
+        assert "RRULE" in result.output or "FREQ" in result.output
+
+
+class TestOkazajoModifiCLI:
+    """Tests for okazajo modifi with date+time split."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, tmp_path):
+        """Patch data dir and reset singletons."""
+        import A_organizi.data.storage as storage_module
+        import A_organizi.service.kalendaro as kal_svc
+
+        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
+        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
+        monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
+        monkeypatch.setattr(kal_svc, "_evento_service", None)
+
+        import A_organizi.cli.kalendaro as kal_cli
+        monkeypatch.setattr(kal_cli, "probe_calendar_config",
+                            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"})
+        monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
+
+    def _create_event(self, titolo="Existing", komenco="2026-06-02T10:00:00+00:00",
+                       fino="2026-06-02T11:00:00+00:00"):
+        """Create a calendar + event, return event UUID."""
+        from A_organizi.service.kalendaro import get_kalendaro_service, get_evento_service
+        cal_svc = get_kalendaro_service()
+        cal = cal_svc.create({"url": "https://cal.ics", "username": "u", "remote": 0})
+
+        evt_svc = get_evento_service()
+        evt = evt_svc.create({
+            "kalendaro_uuid": cal["uuid"],
+            "titolo": titolo,
+            "komenco": komenco,
+            "fino": fino,
+        })
+        return evt["uuid"]
+
+    def test_modifi_change_date(self):
+        """Change date with --dato (keeps default times 0000-2359)."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        evt_uuid = self._create_event()
+
+        result = runner.invoke(app, [
+            "okazajo", "modifi", evt_uuid[:8],
+            "--dato", "20260704",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Modifis" in result.output
+
+    def test_modifi_change_time_only(self):
+        """Change time without --dato uses event's current date."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        evt_uuid = self._create_event()
+
+        result = runner.invoke(app, [
+            "okazajo", "modifi", evt_uuid[:8],
+            "--komenco", "1400",
+            "--fino", "1530",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Modifis" in result.output
+
+    def test_modifi_change_rrule(self):
+        """Change recurrence via RRULE shorthand."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        evt_uuid = self._create_event()
+
+        result = runner.invoke(app, [
+            "okazajo", "modifi", evt_uuid[:8],
+            "--ripeto", "weekly",
+        ])
+        assert result.exit_code == 0, result.output
+
+        from A_organizi.service.kalendaro import get_evento_service
+        event = get_evento_service().get(evt_uuid)
+        assert event["ripeto"] == "FREQ=WEEKLY"
+
+    def test_modifi_invalid_rrule(self):
+        """Invalid RRULE should be rejected."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        evt_uuid = self._create_event()
+
+        result = runner.invoke(app, [
+            "okazajo", "modifi", evt_uuid[:8],
+            "--ripeto", "INVALID",
+        ])
+        assert result.exit_code != 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
