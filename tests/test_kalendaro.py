@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -886,16 +887,15 @@ class TestReproviCLI:
         assert result.exit_code == 0, result.output
         assert "Neniu malsukcesinta" in result.output
 
-    def test_reprovi_all(self):
-        """Reprovi all resets failed to pending."""
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_reprovi_all(self, mock_process):
+        """Reprovi all processes all failed jobs."""
         from typer.testing import CliRunner
         from A_organizi.cli import app
-        from A_organizi.utils.sync import queue_sync
         from A_organizi.service.kalendaro import get_evento_service
 
         runner = CliRunner()
         db = get_evento_service().db
-        # Insert a failed job directly
         db.execute(
             "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
             " VALUES ('fjob', 'cal-uuid', 'push', '{}', 'failed', 'HTTP 500', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
@@ -903,12 +903,11 @@ class TestReproviCLI:
 
         result = runner.invoke(app, ["okazajo", "reprovi"])
         assert result.exit_code == 0, result.output
-        # Check the failed job is now pending
-        row = db.execute_one("SELECT stato FROM sync_queue WHERE id = 'fjob'")
-        assert row["stato"] == "pending"
+        mock_process.assert_called_once()
 
-    def test_reprovi_specific_job(self):
-        """Reprovi with job ID resets that specific job."""
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_reprovi_specific_job(self, mock_process):
+        """Reprovi with job ID retries that specific job."""
         from typer.testing import CliRunner
         from A_organizi.cli import app
         from A_organizi.service.kalendaro import get_evento_service
@@ -924,14 +923,11 @@ class TestReproviCLI:
             " VALUES ('job-b', 'cal-uuid', 'push', '{}', 'failed', 'err', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
         )
 
-        # Reprovi only job-a
         result = runner.invoke(app, ["okazajo", "reprovi", "job-a"])
         assert result.exit_code == 0, result.output
-
-        row_a = db.execute_one("SELECT stato FROM sync_queue WHERE id = 'job-a'")
-        row_b = db.execute_one("SELECT stato FROM sync_queue WHERE id = 'job-b'")
-        assert row_a["stato"] == "pending"
-        assert row_b["stato"] == "failed"
+        mock_process.assert_called_once()
+        args, _ = mock_process.call_args
+        assert args[1]["id"] == "job-a"
 
     def test_reprovi_help_shown(self):
         """Help text should show for reprovi."""

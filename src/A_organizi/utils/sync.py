@@ -205,11 +205,115 @@ def queue_sync(
     )
 
 
+def process_sync_job(db, job: dict) -> None:
+    """Execute a single sync job (pull or push).
+
+    Updates the job status to ``running`` before processing and to
+    ``completed`` or ``failed`` when done.
+
+    Args:
+        db: Database connection (``SQLiteDB`` instance).
+        job: Sync queue row dict (must include ``id``, ``calendar_uuid``,
+            ``operacio``, ``payload``).
+    """
+    job_id = job["id"]
+    cal_uuid = job["calendar_uuid"]
+    operacio = job["operacio"]
+    payload = json.loads(job["payload"])
+
+    # Update status to running
+    db.execute("UPDATE sync_queue SET stato = 'running' WHERE id = ?", (job_id,))
+
+    try:
+        cal = db.execute_one(
+            "SELECT url, username FROM kalendaroj WHERE uuid = ?", (cal_uuid,)
+        )
+        if not cal:
+            raise ValueError(f"Calendar not found: {cal_uuid}")
+
+        url = cal["url"]
+        username = cal["username"]
+        password = get_password(cal_uuid)
+
+        if operacio == "pull":
+            results = fetch_remote_calendar_payloads(url, username, password)
+            stored = 0
+            for href, ics_data in results:
+                uid_match = re.search(r"^UID:(.+)$", ics_data, re.MULTILINE)
+                if uid_match:
+                    uid = uid_match.group(1).strip()
+                    existing = db.execute_one(
+                        "SELECT uuid FROM eventoj WHERE uuid = ? AND kalendaro_uuid = ?",
+                        (uid, cal_uuid),
+                    )
+                    if existing:
+                        db.execute(
+                            "UPDATE eventoj SET remote_href = ? WHERE uuid = ?",
+                            (href, uid),
+                        )
+                        stored += 1
+            info(
+                f"[sync] Pulled {len(results)} events, "
+                f"updated {stored} remote_hrefs from {cal_uuid[:8]}"
+            )
+        elif operacio == "push":
+            sub_op = payload.get("operation", "")
+            event_uuid = payload.get("event_uuid", "")
+            if not event_uuid:
+                raise ValueError("Push job missing event_uuid")
+
+            remote_href: str | None = payload.get("remote_href") or None
+            if not remote_href:
+                event_row = db.execute_one(
+                    "SELECT remote_href FROM eventoj WHERE uuid = ?",
+                    (event_uuid,),
+                )
+                if event_row and event_row.get("remote_href"):
+                    remote_href = event_row["remote_href"]
+
+            if sub_op == "delete":
+                delete_event_from_remote(
+                    url, username, password, event_uuid, remote_href
+                )
+                info(f"[sync] Deleted {event_uuid[:8]} from {cal_uuid[:8]}")
+            else:
+                event = db.execute_one(
+                    "SELECT * FROM eventoj WHERE uuid = ?", (event_uuid,)
+                )
+                if event:
+                    from A_organizi.utils.ics import events_to_ics
+                    ics_payload = events_to_ics([dict(event)])
+                    remote_href = remote_href or event.get("remote_href") or None
+                    push_event_to_remote(
+                        url, username, password, ics_payload, event_uuid, remote_href
+                    )
+                    info(f"[sync] Pushed {event_uuid[:8]} ({sub_op}) to {cal_uuid[:8]}")
+                else:
+                    delete_event_from_remote(
+                        url, username, password, event_uuid, remote_href
+                    )
+                    info(f"[sync] Event {event_uuid[:8]} gone locally, deleted remotely")
+        else:
+            raise ValueError(f"Unknown operation: {operacio}")
+
+        db.execute(
+            "UPDATE sync_queue SET stato = 'completed' WHERE id = ?", (job_id,)
+        )
+
+    except Exception as exc:
+        db.execute(
+            "UPDATE sync_queue SET stato = 'failed', eraro = ? WHERE id = ?",
+            (str(exc), job_id),
+        )
+
+
 def sync_worker() -> None:
-    """Background worker that processes sync jobs."""
+    """Background worker that processes sync jobs.
+
+    Runs in an infinite loop polling for pending jobs.
+    """
     while True:
         db = get_db()
-        # Get pending job
         job = db.execute_one(
             "SELECT * FROM sync_queue WHERE stato = 'pending' ORDER BY kreita_je LIMIT 1"
         )
@@ -218,106 +322,7 @@ def sync_worker() -> None:
             time.sleep(5)
             continue
 
-        job_id = job["id"]
-        cal_uuid = job["calendar_uuid"]
-        operacio = job["operacio"]
-        payload = json.loads(job["payload"])
-
-        # Update status to running
-        db.execute(
-            "UPDATE sync_queue SET stato = 'running' WHERE id = ?", (job_id,)
-        )
-
-        try:
-            # Get calendar credentials
-            cal = db.execute_one(
-                "SELECT url, username FROM kalendaroj WHERE uuid = ?", (cal_uuid,)
-            )
-            if not cal:
-                raise ValueError(f"Calendar not found: {cal_uuid}")
-
-            url = cal["url"]
-            username = cal["username"]
-            password = get_password(cal_uuid)
-
-            if operacio == "pull":
-                results = fetch_remote_calendar_payloads(url, username, password)
-                # Store remote_href for known events
-                stored = 0
-                for href, ics_data in results:
-                    uid_match = re.search(r"^UID:(.+)$", ics_data, re.MULTILINE)
-                    if uid_match:
-                        uid = uid_match.group(1).strip()
-                        existing = db.execute_one(
-                            "SELECT uuid FROM eventoj WHERE uuid = ? AND kalendaro_uuid = ?",
-                            (uid, cal_uuid),
-                        )
-                        if existing:
-                            db.execute(
-                                "UPDATE eventoj SET remote_href = ? WHERE uuid = ?",
-                                (href, uid),
-                            )
-                            stored += 1
-                info(
-                    f"[sync] Pulled {len(results)} events, "
-                    f"updated {stored} remote_hrefs from {cal_uuid[:8]}"
-                )
-            elif operacio == "push":
-                # Push event changes to remote CalDAV server
-                sub_op = payload.get("operation", "")
-                event_uuid = payload.get("event_uuid", "")
-                event_data = payload.get("event_data")
-                if not event_uuid:
-                    raise ValueError("Push job missing event_uuid")
-
-                # Resolve remote_href: payload → DB → None (fabricated fallback)
-                remote_href: str | None = payload.get("remote_href") or None
-                if not remote_href:
-                    event_row = db.execute_one(
-                        "SELECT remote_href FROM eventoj WHERE uuid = ?",
-                        (event_uuid,),
-                    )
-                    if event_row and event_row.get("remote_href"):
-                        remote_href = event_row["remote_href"]
-
-                if sub_op == "delete":
-                    # Use stored event_data; event may already be gone from local DB
-                    delete_event_from_remote(
-                        url, username, password, event_uuid, remote_href
-                    )
-                    info(f"[sync] Deleted {event_uuid[:8]} from {cal_uuid[:8]}")
-                else:
-                    # Re-read from DB to get latest data (catches subsequent edits)
-                    event = db.execute_one(
-                        "SELECT * FROM eventoj WHERE uuid = ?", (event_uuid,)
-                    )
-                    if event:
-                        from A_organizi.utils.ics import events_to_ics
-                        ics_payload = events_to_ics([dict(event)])
-                        remote_href = remote_href or event.get("remote_href") or None
-                        push_event_to_remote(
-                            url, username, password, ics_payload, event_uuid, remote_href
-                        )
-                        info(f"[sync] Pushed {event_uuid[:8]} ({sub_op}) to {cal_uuid[:8]}")
-                    else:
-                        # Event deleted before push ran — try DELETE on remote
-                        delete_event_from_remote(
-                            url, username, password, event_uuid, remote_href
-                        )
-                        info(f"[sync] Event {event_uuid[:8]} gone locally, deleted remotely")
-            else:
-                raise ValueError(f"Unknown operation: {operacio}")
-
-            # Mark completed
-            db.execute(
-                "UPDATE sync_queue SET stato = 'completed' WHERE id = ?", (job_id,)
-            )
-
-        except Exception as exc:
-            db.execute(
-                "UPDATE sync_queue SET stato = 'failed', eraro = ? WHERE id = ?",
-                (str(exc), job_id),
-            )
+        process_sync_job(db, dict(job))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -453,33 +458,38 @@ def start_sync_worker() -> None:
 
 
 def reprovi_sync_job(
-    con,
+    db,
     job_id: str | None = None,
     calendar_uuid: str | None = None,
 ) -> int:
-    """Reset failed sync jobs to ``pending`` for retry.
+    """Retry failed sync jobs synchronously.
+
+    Finds failed jobs matching the criteria and processes them immediately.
+    Unlike simply resetting to ``pending`` (which requires the background
+    worker to pick them up), this runs the job inline.
 
     Args:
-        con: Database connection (``SQLiteDB`` instance).
+        db: Database connection (``SQLiteDB`` instance).
         job_id: Specific job ID to retry. If None, retries ALL failed jobs.
         calendar_uuid: Optional calendar filter (ignored if ``job_id`` set).
 
     Returns:
-        Number of jobs reset to pending.
+        Number of jobs retried.
     """
     params: list[str] = []
     if job_id:
-        query = "UPDATE sync_queue SET stato = 'pending', eraro = '' WHERE id = ? AND stato = 'failed'"
+        query = "SELECT * FROM sync_queue WHERE id = ? AND stato = 'failed'"
         params.append(job_id)
     elif calendar_uuid:
-        query = "UPDATE sync_queue SET stato = 'pending', eraro = '' WHERE calendar_uuid = ? AND stato = 'failed'"
+        query = "SELECT * FROM sync_queue WHERE calendar_uuid = ? AND stato = 'failed'"
         params.append(calendar_uuid)
     else:
-        query = "UPDATE sync_queue SET stato = 'pending', eraro = '' WHERE stato = 'failed'"
+        query = "SELECT * FROM sync_queue WHERE stato = 'failed'"
 
-    with con.transaction() as conn:
-        cursor = conn.execute(query, tuple(params))
-        return cursor.rowcount
+    jobs = db.execute(query, tuple(params))
+    for job in jobs:
+        process_sync_job(db, dict(job))
+    return len(jobs)
 
 
 def list_sync_queue(
@@ -621,6 +631,7 @@ __all__ = [
     "queue_sync",
     "list_sync_queue",
     "reprovi_sync_job",
+    "process_sync_job",
     "push_event_to_remote",
     "delete_event_from_remote",
     "sync_worker",

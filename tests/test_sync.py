@@ -847,56 +847,53 @@ class TestReprovi:
         )
         db.execute(
             "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
-            " VALUES ('job001', ?, 'push', '{}', 'completed', '', '2026-06-02T10:00:00', '2026-06-02T10:00:00')",
+            " VALUES ('job001', ?, 'push', '{\"e\":\"c\"}', 'completed', '', '2026-06-02T10:00:00', '2026-06-02T10:00:00')",
             (cal_uuid,),
         )
         db.execute(
             "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
-            " VALUES ('job002', ?, 'push', '{}', 'pending', '', '2026-06-02T11:00:00', '2026-06-02T11:00:00')",
+            " VALUES ('job002', ?, 'push', '{\"e\":\"p\"}', 'pending', '', '2026-06-02T11:00:00', '2026-06-02T11:00:00')",
             (cal_uuid,),
         )
         db.execute(
             "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
-            " VALUES ('job003', ?, 'push', '{}', 'failed', 'HTTP 500', '2026-06-02T12:00:00', '2026-06-02T12:00:00')",
+            " VALUES ('job003', ?, 'push', '{\"e\":\"f\"}', 'failed', 'HTTP 500', '2026-06-02T12:00:00', '2026-06-02T12:00:00')",
             (cal_uuid,),
         )
         return db, cal_uuid
 
-    def test_retry_specific_job(self, tmp_path):
-        """Retry one specific failed job."""
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_retry_specific_job(self, mock_process, tmp_path):
+        """Retry one specific failed job calls process_sync_job once."""
         db, _ = self._setup_db(tmp_path)
-        from A_organizi.utils.sync import reprovi_sync_job, list_sync_queue
+        from A_organizi.utils.sync import reprovi_sync_job
 
         count = reprovi_sync_job(db, job_id="job003")
         assert count == 1
+        mock_process.assert_called_once()
+        # Verify it was called with the failed job
+        args, _ = mock_process.call_args
+        assert args[1]["id"] == "job003"
 
-        rows = list_sync_queue(db, stato="failed")
-        assert len(rows) == 0
-
-        rows = list_sync_queue(db, stato="pending")
-        assert len(rows) == 2  # job002 was already pending, job003 now pending
-
-    def test_retry_specific_job_not_failed(self, tmp_path):
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_retry_specific_job_not_failed(self, mock_process, tmp_path):
         """Retry a completed job does nothing."""
         db, _ = self._setup_db(tmp_path)
-        from A_organizi.utils.sync import reprovi_sync_job, list_sync_queue
+        from A_organizi.utils.sync import reprovi_sync_job
 
         count = reprovi_sync_job(db, job_id="job001")
         assert count == 0  # was completed, not failed
+        mock_process.assert_not_called()
 
-        rows = list_sync_queue(db, stato="completed")
-        assert len(rows) == 1
-
-    def test_retry_all_failed(self, tmp_path):
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_retry_all_failed(self, mock_process, tmp_path):
         """Retry all failed jobs."""
         db, _ = self._setup_db(tmp_path)
-        from A_organizi.utils.sync import reprovi_sync_job, list_sync_queue
+        from A_organizi.utils.sync import reprovi_sync_job
 
         count = reprovi_sync_job(db)
         assert count == 1
-
-        rows = list_sync_queue(db, stato="failed")
-        assert len(rows) == 0
+        assert mock_process.call_count == 1
 
     def test_retry_all_when_none_failed(self, tmp_path):
         """Retry all when nothing is failed returns 0."""
@@ -909,21 +906,22 @@ class TestReprovi:
         count = reprovi_sync_job(db)
         assert count == 0
 
-    def test_retry_by_calendar(self, tmp_path):
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_retry_by_calendar(self, mock_process, tmp_path):
         """Retry all failed jobs for a specific calendar."""
         db, cal_uuid = self._setup_db(tmp_path)
-        from A_organizi.utils.sync import reprovi_sync_job, list_sync_queue
+        from A_organizi.utils.sync import reprovi_sync_job
 
         count = reprovi_sync_job(db, calendar_uuid=cal_uuid)
         assert count == 1
+        mock_process.assert_called_once()
 
-        rows = list_sync_queue(db, stato="failed")
-        assert len(rows) == 0
-
-    def test_retry_by_calendar_no_match(self, tmp_path):
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_retry_by_calendar_no_match(self, mock_process, tmp_path):
         """Retry by calendar with no failed jobs returns 0."""
         db, cal_uuid = self._setup_db(tmp_path)
         from A_organizi.utils.sync import reprovi_sync_job
 
         count = reprovi_sync_job(db, calendar_uuid="nonexistent")
         assert count == 0
+        mock_process.assert_not_called()
