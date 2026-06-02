@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime
 from threading import Lock, Thread
@@ -100,7 +101,7 @@ def fetch_remote_calendar_payloads(
     url: str,
     username: str,
     password: str,
-) -> list[str]:
+) -> list[tuple[str, str]]:
     """Fetch calendar events via CalDAV REPORT.
 
     Args:
@@ -109,7 +110,7 @@ def fetch_remote_calendar_payloads(
         password: Password for Basic auth.
 
     Returns:
-        List of ICS event payloads (text/calendar bodies).
+        List of (href, calendar_data) tuples, one per event.
     """
     # CalDAV REPORT request for all events
     report_body = """<?xml version="1.0"?>
@@ -135,40 +136,44 @@ def fetch_remote_calendar_payloads(
     )
 
     if status == 207:  # Multi-status
-        # Parse multi-status response to extract calendar-data elements
-        payloads = _parse_multistatus(text)
-        return payloads
+        return _parse_multistatus(text)
     elif status == 404:
         return []
     else:
         raise RuntimeError(f"CalDAV fetch failed: {status}")
 
 
-def _parse_multistatus(text: str) -> list[str]:
+def _parse_multistatus(text: str) -> list[tuple[str, str]]:
     """Parse CalDAV multistatus response.
 
+    Uses ElementTree for reliable XML parsing. Each ``<d:response>``
+    contains a ``<d:href>`` (the resource path) and ``<c:calendar-data>``
+    (the ICS body). Both are returned as paired tuples.
+
     Args:
-        text: Raw XML response.
+        text: Raw XML multistatus response.
 
     Returns:
-        List of calendar-data contents.
+        List of (href, calendar_data) tuples, one per event response.
     """
-    import re
+    import xml.etree.ElementTree as ET
 
-    payloads: list[str] = []
-    pattern = r"<c:calendar-data>(.*?)</c:calendar-data>"
-    matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
-    for match in matches:
-        # Decode HTML entities if needed
-        decoded = (
-            match.replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&amp;", "&")
-            .replace("&quot;", '"')
-            .replace("&#39;", "'")
-        )
-        payloads.append(decoded)
-    return payloads
+    ns = {
+        "d": "DAV:",
+        "c": "urn:ietf:params:xml:ns:caldav",
+    }
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return []
+    results: list[tuple[str, str]] = []
+    for response in root.findall("d:response", ns):
+        href_el = response.find("d:href", ns)
+        href = href_el.text if href_el is not None else ""
+        data_el = response.find(".//c:calendar-data", ns)
+        data = data_el.text if data_el is not None else ""
+        results.append((href.strip(), data.strip()))
+    return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -236,10 +241,27 @@ def sync_worker() -> None:
             password = get_password(cal_uuid)
 
             if operacio == "pull":
-                # Pull events from remote
-                events = fetch_remote_calendar_payloads(url, username, password)
-                # TODO: Merge events into local database
-                info(f"[sync] Pulled {len(events)} events from {cal_uuid}")
+                results = fetch_remote_calendar_payloads(url, username, password)
+                # Store remote_href for known events
+                stored = 0
+                for href, ics_data in results:
+                    uid_match = re.search(r"^UID:(.+)$", ics_data, re.MULTILINE)
+                    if uid_match:
+                        uid = uid_match.group(1).strip()
+                        existing = db.execute_one(
+                            "SELECT uuid FROM eventoj WHERE uuid = ? AND kalendaro_uuid = ?",
+                            (uid, cal_uuid),
+                        )
+                        if existing:
+                            db.execute(
+                                "UPDATE eventoj SET remote_href = ? WHERE uuid = ?",
+                                (href, uid),
+                            )
+                            stored += 1
+                info(
+                    f"[sync] Pulled {len(results)} events, "
+                    f"updated {stored} remote_hrefs from {cal_uuid[:8]}"
+                )
             elif operacio == "push":
                 # Push event changes to remote CalDAV server
                 sub_op = payload.get("operation", "")
@@ -248,9 +270,21 @@ def sync_worker() -> None:
                 if not event_uuid:
                     raise ValueError("Push job missing event_uuid")
 
+                # Resolve remote_href: payload → DB → None (fabricated fallback)
+                remote_href: str | None = payload.get("remote_href") or None
+                if not remote_href:
+                    event_row = db.execute_one(
+                        "SELECT remote_href FROM eventoj WHERE uuid = ?",
+                        (event_uuid,),
+                    )
+                    if event_row and event_row.get("remote_href"):
+                        remote_href = event_row["remote_href"]
+
                 if sub_op == "delete":
                     # Use stored event_data; event may already be gone from local DB
-                    delete_event_from_remote(url, username, password, event_uuid)
+                    delete_event_from_remote(
+                        url, username, password, event_uuid, remote_href
+                    )
                     info(f"[sync] Deleted {event_uuid[:8]} from {cal_uuid[:8]}")
                 else:
                     # Re-read from DB to get latest data (catches subsequent edits)
@@ -260,11 +294,16 @@ def sync_worker() -> None:
                     if event:
                         from A_organizi.utils.ics import events_to_ics
                         ics_payload = events_to_ics([dict(event)])
-                        push_event_to_remote(url, username, password, ics_payload, event_uuid)
+                        remote_href = remote_href or event.get("remote_href") or None
+                        push_event_to_remote(
+                            url, username, password, ics_payload, event_uuid, remote_href
+                        )
                         info(f"[sync] Pushed {event_uuid[:8]} ({sub_op}) to {cal_uuid[:8]}")
                     else:
                         # Event deleted before push ran — try DELETE on remote
-                        delete_event_from_remote(url, username, password, event_uuid)
+                        delete_event_from_remote(
+                            url, username, password, event_uuid, remote_href
+                        )
                         info(f"[sync] Event {event_uuid[:8]} gone locally, deleted remotely")
             else:
                 raise ValueError(f"Unknown operation: {operacio}")
@@ -286,12 +325,59 @@ def sync_worker() -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+# HTTP status descriptions for error messages
+_HTTP_DESCRIPTION: dict[int, str] = {
+    400: "Bad Request",
+    401: "Unauthorized — check username and password",
+    403: "Forbidden — check credentials or calendar permissions",
+    404: "Not Found — check calendar URL",
+    405: "Method Not Allowed",
+    408: "Request Timeout",
+    409: "Conflict",
+    500: "Internal Server Error",
+    502: "Bad Gateway",
+    503: "Service Unavailable",
+    504: "Gateway Timeout",
+}
+
+
+def _http_error(status: int, operation: str) -> str:
+    """Build a descriptive HTTP error message."""
+    desc = _HTTP_DESCRIPTION.get(status, f"HTTP {status}")
+    return f"{operation} failed: {desc}"
+
+
+def _event_url(url: str, event_uuid: str, remote_href: str | None = None) -> str:
+    """Build the PUT/DELETE URL for a remote event.
+
+    Uses the server-provided ``remote_href`` when available (correct CalDAV
+    resource path), otherwise falls back to fabricating ``{url}/{uuid}.ics``.
+
+    Args:
+        url: Base calendar URL.
+        event_uuid: Event UUID (used for fallback).
+        remote_href: Server-provided resource path (from multistatus).
+
+    Returns:
+        Full URL string.
+    """
+    if remote_href:
+        # Ensure absolute URL — if remote_href is a path, prepend origin
+        if remote_href.startswith("/"):
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            return f"{parsed.scheme}://{parsed.netloc}{remote_href}"
+        return remote_href
+    return url.rstrip("/") + f"/{event_uuid}.ics"
+
+
 def push_event_to_remote(
     url: str,
     username: str,
     password: str,
     ics_payload: str,
     event_uuid: str,
+    remote_href: str | None = None,
 ) -> int:
     """PUT an ICS event to the remote CalDAV server.
 
@@ -301,6 +387,7 @@ def push_event_to_remote(
         password: Password for Basic auth.
         ics_payload: Full ICS text (VCALENDAR wrapper).
         event_uuid: Event UUID used as the resource name.
+        remote_href: Server-provided resource path (from multistatus REPORT).
 
     Returns:
         HTTP status code (200, 201, or 204 on success).
@@ -308,7 +395,7 @@ def push_event_to_remote(
     Raises:
         RuntimeError: If the server returns an unexpected status.
     """
-    put_url = url.rstrip("/") + f"/{event_uuid}.ics"
+    put_url = _event_url(url, event_uuid, remote_href)
     headers = {
         "Content-Type": "text/calendar; charset=utf-8",
     }
@@ -316,7 +403,7 @@ def push_event_to_remote(
         put_url, username, password, "PUT", ics_payload, headers
     )
     if status not in (200, 201, 204):
-        raise RuntimeError(f"CalDAV PUT failed: HTTP {status}")
+        raise RuntimeError(_http_error(status, "CalDAV PUT"))
     return status
 
 
@@ -325,6 +412,7 @@ def delete_event_from_remote(
     username: str,
     password: str,
     event_uuid: str,
+    remote_href: str | None = None,
 ) -> int:
     """DELETE an event from the remote CalDAV server.
 
@@ -333,6 +421,7 @@ def delete_event_from_remote(
         username: Username for Basic auth.
         password: Password for Basic auth.
         event_uuid: Event UUID used as the resource name.
+        remote_href: Server-provided resource path (from multistatus REPORT).
 
     Returns:
         HTTP status code (200 or 204 on success; 404 is accepted as "already gone").
@@ -340,12 +429,12 @@ def delete_event_from_remote(
     Raises:
         RuntimeError: If the server returns an unexpected status.
     """
-    delete_url = url.rstrip("/") + f"/{event_uuid}.ics"
+    delete_url = _event_url(url, event_uuid, remote_href)
     status, _ = http_fetch_text(
         delete_url, username, password, "DELETE"
     )
     if status not in (200, 204, 404):
-        raise RuntimeError(f"CalDAV DELETE failed: HTTP {status}")
+        raise RuntimeError(_http_error(status, "CalDAV DELETE"))
     return status
 
 
@@ -479,7 +568,7 @@ def probe_calendar_config(
     if status == 404:
         raise ValueError("Calendar not found at URL.")
     if status not in (200, 207):
-        raise ValueError(f"Cannot access calendar (HTTP {status}).")
+        raise ValueError(_http_error(status, "Calendar access"))
 
     # Try to get event count via CalDAV REPORT
     try:

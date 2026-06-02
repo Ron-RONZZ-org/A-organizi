@@ -17,6 +17,10 @@ with patch.dict("sys.modules", {"keyring": mock_keyring}):
         remote_http_url,
         http_fetch_text,
         fetch_remote_calendar_payloads,
+        _parse_multistatus,
+        _event_url,
+        push_event_to_remote,
+        delete_event_from_remote,
         set_password,
         get_password,
         delete_password,
@@ -112,7 +116,9 @@ END:VCALENDAR</c:calendar-data>
         )
 
         assert len(payloads) == 1
-        assert "BEGIN:VCALENDAR" in payloads[0]
+        href, data = payloads[0]
+        assert href == "/cal/events/1"
+        assert "BEGIN:VCALENDAR" in data
 
 
 class TestPasswordManagement:
@@ -287,14 +293,115 @@ class TestSyncIntegration:
         assert "kreita_je" in _CREATE_UNDO_CHANGES
 
 
+class TestParseMultistatus:
+    """Tests for _parse_multistatus (CalDAV multistatus XML parsing)."""
+
+    def test_two_responses(self):
+        """Parses two responses with href and data."""
+        xml = """<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/cal/ev-1.ics</d:href>
+    <d:propstat>
+      <d:prop>
+        <c:calendar-data>BEGIN:VCALENDAR
+UID:ev-1
+END:VCALENDAR</c:calendar-data>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/cal/ev-2.ics</d:href>
+    <d:propstat>
+      <d:prop>
+        <c:calendar-data>BEGIN:VCALENDAR
+UID:ev-2
+END:VCALENDAR</c:calendar-data>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"""
+        results = _parse_multistatus(xml)
+        assert len(results) == 2
+
+        href0, data0 = results[0]
+        assert href0 == "/cal/ev-1.ics"
+        assert "UID:ev-1" in data0
+
+        href1, data1 = results[1]
+        assert href1 == "/cal/ev-2.ics"
+        assert "UID:ev-2" in data1
+
+    def test_empty_multistatus(self):
+        """Empty multistatus with no responses returns []."""
+        xml = """<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+</d:multistatus>"""
+        results = _parse_multistatus(xml)
+        assert results == []
+
+    def test_malformed_xml(self):
+        """Malformed XML returns [] gracefully."""
+        results = _parse_multistatus("not xml at all")
+        assert results == []
+
+    def test_missing_href_and_data(self):
+        """Response without href or calendar-data returns empty strings."""
+        xml = """<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:propstat>
+      <d:status>HTTP/1.1 404 Not Found</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"""
+        results = _parse_multistatus(xml)
+        assert len(results) == 1
+        href, data = results[0]
+        assert href == ""
+        assert data == ""
+
+
+class TestEventUrl:
+    """Tests for _event_url helper."""
+
+    def test_without_remote_href(self):
+        """Without remote_href, fabricates {url}/{uuid}.ics."""
+        url = _event_url("https://example.com/cal", "ev-123")
+        assert url == "https://example.com/cal/ev-123.ics"
+
+    def test_without_remote_href_trailing_slash(self):
+        """Trailing slash on base URL is handled."""
+        url = _event_url("https://example.com/cal/", "ev-123")
+        assert url == "https://example.com/cal/ev-123.ics"
+
+    def test_with_remote_href_absolute_url(self):
+        """Full absolute URL remote_href is used as-is."""
+        url = _event_url(
+            "https://example.com/cal",
+            "ev-123",
+            remote_href="https://server.com/remote/cal/ev-123.ics",
+        )
+        assert url == "https://server.com/remote/cal/ev-123.ics"
+
+    def test_with_remote_href_relative_path(self):
+        """Path-only remote_href is prepended with origin."""
+        url = _event_url(
+            "https://example.com/cal",
+            "ev-123",
+            remote_href="/remote/cal/ev-123.ics",
+        )
+        assert url == "https://example.com/remote/cal/ev-123.ics"
+
+
 class TestSyncPushRemote:
     """Tests for CalDAV push and delete helpers."""
 
     @patch("urllib.request.urlopen")
     def test_push_event_to_remote_success(self, mock_urlopen):
         """PUT creates event on remote (201)."""
-        from A_organizi.utils.sync import push_event_to_remote
-
         mock_response = MagicMock()
         mock_response.status = 201
         mock_response.read.return_value = b""
@@ -308,15 +415,37 @@ class TestSyncPushRemote:
         )
 
         assert status == 201
-        # Verify PUT was called with correct URL
         req = mock_urlopen.call_args[0][0]
         assert req.get_method() == "PUT"
         assert "/ev-123.ics" in req.full_url
 
     @patch("urllib.request.urlopen")
+    def test_push_event_to_remote_with_href(self, mock_urlopen):
+        """With remote_href, PUT uses the provided path."""
+        mock_response = MagicMock()
+        mock_response.status = 201
+        mock_response.read.return_value = b""
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        status = push_event_to_remote(
+            "https://example.com/cal/", "user", "pass",
+            "BEGIN:VCALENDAR\nEND:VCALENDAR\n", "ev-123",
+            remote_href="/custom/path/ev-123.ics",
+        )
+
+        assert status == 201
+        req = mock_urlopen.call_args[0][0]
+        assert req.get_method() == "PUT"
+        # Should use the remote_href path, not the base+uuid fallback
+        assert "example.com/custom/path/ev-123.ics" in req.full_url
+        # Should NOT contain the default /cal/ev-123.ics pattern
+        assert "/cal/ev-123.ics" not in req.full_url
+
+    @patch("urllib.request.urlopen")
     def test_push_event_to_remote_failure(self, mock_urlopen):
         """PUT that returns unexpected status raises RuntimeError."""
-        from A_organizi.utils.sync import push_event_to_remote
         from urllib.error import HTTPError
 
         mock_error = HTTPError(
@@ -334,8 +463,6 @@ class TestSyncPushRemote:
     @patch("urllib.request.urlopen")
     def test_delete_event_from_remote_success(self, mock_urlopen):
         """DELETE removes event on remote (204)."""
-        from A_organizi.utils.sync import delete_event_from_remote
-
         mock_response = MagicMock()
         mock_response.status = 204
         mock_response.read.return_value = b""
@@ -353,9 +480,28 @@ class TestSyncPushRemote:
         assert "/ev-456.ics" in req.full_url
 
     @patch("urllib.request.urlopen")
+    def test_delete_event_from_remote_with_href(self, mock_urlopen):
+        """With remote_href, DELETE uses the provided path."""
+        mock_response = MagicMock()
+        mock_response.status = 204
+        mock_response.read.return_value = b""
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        status = delete_event_from_remote(
+            "https://example.com/cal/", "user", "pass", "ev-456",
+            remote_href="/other/path/ev-456.ics",
+        )
+
+        assert status == 204
+        req = mock_urlopen.call_args[0][0]
+        assert req.get_method() == "DELETE"
+        assert "/other/path/ev-456.ics" in req.full_url
+
+    @patch("urllib.request.urlopen")
     def test_delete_event_from_remote_already_gone(self, mock_urlopen):
         """DELETE returning 404 is accepted as 'already gone'."""
-        from A_organizi.utils.sync import delete_event_from_remote
         from urllib.error import HTTPError
 
         mock_error = HTTPError(
@@ -372,7 +518,6 @@ class TestSyncPushRemote:
     @patch("urllib.request.urlopen")
     def test_delete_event_from_remote_failure(self, mock_urlopen):
         """DELETE that returns unexpected status raises RuntimeError."""
-        from A_organizi.utils.sync import delete_event_from_remote
         from urllib.error import HTTPError
 
         mock_error = HTTPError(
@@ -460,6 +605,8 @@ class TestEventServiceSyncHooks:
         payload = json.loads(job["payload"])
         assert payload["operation"] == "create"
         assert "event_uuid" in payload
+        # remote_href included in payload (even if empty)
+        assert "remote_href" in payload
 
     def test_post_create_local_calendar_skips(self, db_with_local_calendar):
         """Creating an event in a local calendar does NOT enqueue a push job."""

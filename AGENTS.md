@@ -164,6 +164,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #31 | ✅ Done | PR merged — implementation of #30 |
 | #32 | ✅ Done | okazajo aldoni: positional titolo/komenco/fino, improved --ripeto help |
 | #33 | ✅ Done | okazajo vici: sync queue monitor command |
+| #35 | ✅ Done | CalDAV push 403 fix: store remote_href from REPORT, use for PUT/DELETE |
 
 ## Migration from autish
 

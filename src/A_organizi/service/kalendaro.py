@@ -316,6 +316,7 @@ class EventService(CRUDService):
                     "event_uuid": event_data.get("uuid", ""),
                     "operation": operation,
                     "event_data": event_data,
+                    "remote_href": event_data.get("remote_href", ""),
                 },
             )
 

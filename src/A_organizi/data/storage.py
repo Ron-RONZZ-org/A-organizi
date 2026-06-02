@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS eventoj (
     ripeto TEXT NOT NULL DEFAULT '',
     partoprenantoj TEXT NOT NULL DEFAULT '[]',
     priskribo TEXT NOT NULL DEFAULT '',
+    remote_href TEXT NOT NULL DEFAULT '',
     kreita_je TEXT NOT NULL,
     modifita_je TEXT NOT NULL
 );
@@ -199,8 +200,23 @@ def get_db() -> SQLiteDB:
     for stmt in _CREATE_INDEXES:
         db.execute(stmt)
 
+    # Migrations for existing databases
+    _apply_migrations(db)
+
     _db_instance = db
     return db
+
+
+def _apply_migrations(db) -> None:
+    """Apply schema migrations for existing databases.
+
+    Add new columns that were introduced after the initial schema release.
+    Each migration is idempotent (silently skipped if already applied).
+    """
+    try:
+        db.execute("ALTER TABLE eventoj ADD COLUMN remote_href TEXT NOT NULL DEFAULT ''")
+    except Exception:
+        pass  # Column already exists
 
 
 def get_backup_targets() -> list[BackupTarget]:
