@@ -157,6 +157,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #18 | ✅ Done | -R/--retposto option for okazajo aldoni to import .ics from email |
 | #24 | ✅ Done | todo forigi: per-item resolution and confirmation for multi-identifier input |
 | #26 | ✅ Done | get_db() singleton caching + conftest A_DIR isolation |
+| #29 | ✅ Done | Auto-sync push: events auto-push to CalDAV server on create/update/delete |
 
 ## Migration from autish
 
