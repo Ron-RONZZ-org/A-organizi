@@ -862,5 +862,87 @@ class TestViciCLI:
         assert "--kalendaro" in result.output
 
 
+class TestReproviCLI:
+    """Tests for okazajo reprovi (retry failed sync jobs)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, tmp_path):
+        """Patch data dir and reset singletons."""
+        import A_organizi.data.storage as storage_module
+        import A_organizi.service.kalendaro as kal_svc
+
+        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
+        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
+        monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
+        monkeypatch.setattr(kal_svc, "_evento_service", None)
+
+    def test_reprovi_no_failed_jobs(self):
+        """No failed jobs shows 'neniu malsukcesinta tasko'."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "reprovi"])
+        assert result.exit_code == 0, result.output
+        assert "Neniu malsukcesinta" in result.output
+
+    def test_reprovi_all(self):
+        """Reprovi all resets failed to pending."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+        from A_organizi.utils.sync import queue_sync
+        from A_organizi.service.kalendaro import get_evento_service
+
+        runner = CliRunner()
+        db = get_evento_service().db
+        # Insert a failed job directly
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('fjob', 'cal-uuid', 'push', '{}', 'failed', 'HTTP 500', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
+        )
+
+        result = runner.invoke(app, ["okazajo", "reprovi"])
+        assert result.exit_code == 0, result.output
+        # Check the failed job is now pending
+        row = db.execute_one("SELECT stato FROM sync_queue WHERE id = 'fjob'")
+        assert row["stato"] == "pending"
+
+    def test_reprovi_specific_job(self):
+        """Reprovi with job ID resets that specific job."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+        from A_organizi.service.kalendaro import get_evento_service
+
+        runner = CliRunner()
+        db = get_evento_service().db
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('job-a', 'cal-uuid', 'push', '{}', 'failed', 'err', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
+        )
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('job-b', 'cal-uuid', 'push', '{}', 'failed', 'err', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
+        )
+
+        # Reprovi only job-a
+        result = runner.invoke(app, ["okazajo", "reprovi", "job-a"])
+        assert result.exit_code == 0, result.output
+
+        row_a = db.execute_one("SELECT stato FROM sync_queue WHERE id = 'job-a'")
+        row_b = db.execute_one("SELECT stato FROM sync_queue WHERE id = 'job-b'")
+        assert row_a["stato"] == "pending"
+        assert row_b["stato"] == "failed"
+
+    def test_reprovi_help_shown(self):
+        """Help text should show for reprovi."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "reprovi", "--help"])
+        assert result.exit_code == 0
+        assert "JOB_ID" in result.output or "job" in result.output.lower()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

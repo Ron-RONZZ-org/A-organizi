@@ -18,7 +18,7 @@ from A_organizi.service.kalendaro import (
     get_kalendaro_service,
 )
 from A_organizi.utils.ics import events_to_ics, insert_ics_events
-from A_organizi.utils.sync import list_sync_queue, queue_sync, start_sync_worker
+from A_organizi.utils.sync import list_sync_queue, queue_sync, reprovi_sync_job, start_sync_worker
 from A_organizi.utils.undo import apply_undo, list_undos
 
 
@@ -191,6 +191,54 @@ def register_extra_commands(app: typer.Typer) -> None:
                 str(row.get("kreita_je", ""))[:19],
             )
         console.print(table)
+
+    @app.command()
+    def reprovi(
+        job_id: Optional[str] = typer.Argument(
+            None,
+            help=tr_multi(
+                "Sinkroniga tasko ID por reprovi. Se ne donita, reprovas cxiujn malsukcesintajn.",
+                "Sync job ID to retry. If omitted, retries ALL failed jobs.",
+                "ID de la tâche à réessayer. Si omis, réessaye TOUTES les tâches échouées.",
+            ),
+        ),
+        kalendaro: Optional[str] = typer.Option(
+            None, "--kalendaro", "-k",
+            help=tr_multi(
+                "Reprovi nur por tiu kalendaro.",
+                "Retry only for this calendar.",
+                "Réessayer seulement pour ce calendrier.",
+            ),
+        ),
+    ) -> None:
+        """Reprovi malsukcesintajn sinkronigajn taskojn."""
+        db = get_evento_service().db
+
+        cal_uuid: str | None = None
+        if kalendaro:
+            cal_svc = get_kalendaro_service()
+            cal_uuid = cal_svc.resolve_uuid(kalendaro)
+            if not cal_uuid:
+                error(tr_multi(
+                    f"Kalendaro ne trovita: {kalendaro}",
+                    f"Calendar not found: {kalendaro}",
+                    f"Calendrier non trouvé: {kalendaro}",
+                ))
+                raise typer.Exit(1)
+
+        count = reprovi_sync_job(db, job_id=job_id, calendar_uuid=cal_uuid)
+        if count == 0:
+            info(tr_multi(
+                "Neniu malsukcesinta tasko trovita.",
+                "No failed job found.",
+                "Aucune tâche échouée trouvée.",
+            ))
+        else:
+            info(tr_multi(
+                f"Reprovis {count} tasko(j)n.",
+                f"Retried {count} job(s).",
+                f"{count} tâche(s) réessayée(s).",
+            ))
 
     @app.command()
     def malfari(

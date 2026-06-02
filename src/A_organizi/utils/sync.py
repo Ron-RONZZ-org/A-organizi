@@ -448,8 +448,38 @@ def start_sync_worker() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Sync queue queries
+# Sync queue queries & retry
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+def reprovi_sync_job(
+    con,
+    job_id: str | None = None,
+    calendar_uuid: str | None = None,
+) -> int:
+    """Reset failed sync jobs to ``pending`` for retry.
+
+    Args:
+        con: Database connection (``SQLiteDB`` instance).
+        job_id: Specific job ID to retry. If None, retries ALL failed jobs.
+        calendar_uuid: Optional calendar filter (ignored if ``job_id`` set).
+
+    Returns:
+        Number of jobs reset to pending.
+    """
+    params: list[str] = []
+    if job_id:
+        query = "UPDATE sync_queue SET stato = 'pending', eraro = '' WHERE id = ? AND stato = 'failed'"
+        params.append(job_id)
+    elif calendar_uuid:
+        query = "UPDATE sync_queue SET stato = 'pending', eraro = '' WHERE calendar_uuid = ? AND stato = 'failed'"
+        params.append(calendar_uuid)
+    else:
+        query = "UPDATE sync_queue SET stato = 'pending', eraro = '' WHERE stato = 'failed'"
+
+    with con.transaction() as conn:
+        cursor = conn.execute(query, tuple(params))
+        return cursor.rowcount
 
 
 def list_sync_queue(
@@ -590,6 +620,7 @@ __all__ = [
     "probe_calendar_config",
     "queue_sync",
     "list_sync_queue",
+    "reprovi_sync_job",
     "push_event_to_remote",
     "delete_event_from_remote",
     "sync_worker",
