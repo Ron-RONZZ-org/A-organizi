@@ -13,9 +13,12 @@ from A import error, info, tr_multi
 from A.utils.date import parse_partial_date
 from A.utils.output import console
 
-from A_organizi.service.kalendaro import get_evento_service, get_kalendaro_service
+from A_organizi.service.kalendaro import (
+    get_evento_service,
+    get_kalendaro_service,
+)
 from A_organizi.utils.ics import events_to_ics, insert_ics_events
-from A_organizi.utils.sync import queue_sync, start_sync_worker
+from A_organizi.utils.sync import list_sync_queue, queue_sync, start_sync_worker
 from A_organizi.utils.undo import apply_undo, list_undos
 
 
@@ -119,6 +122,75 @@ def register_extra_commands(app: typer.Typer) -> None:
         for cal_uuid in cal_uuids:
             queue_sync(db, cal_uuid, "pull", {})
             info(f"Sinkronigis kalendaron #{cal_uuid[:8]}.")
+
+    @app.command()
+    def vici(
+        stato: Optional[str] = typer.Argument(
+            None,
+            help=tr_multi(
+                "Filtri lau stato (pending/running/completed/failed).",
+                "Filter by status (pending/running/completed/failed).",
+                "Filtrer par statut (pending/running/completed/failed).",
+            ),
+        ),
+        kalendaro: Optional[str] = typer.Option(
+            None, "--kalendaro", "-k",
+            help=tr_multi(
+                "Filtri lau kalendaro UUID.",
+                "Filter by calendar UUID.",
+                "Filtrer par UUID de calendrier.",
+            ),
+        ),
+    ) -> None:
+        """Montri la staton de la sinkroniga vico."""
+        svc = get_evento_service()
+        db = svc.db
+
+        # Resolve calendar prefix to full UUID
+        cal_uuid: str | None = None
+        if kalendaro:
+            cal_svc = get_kalendaro_service()
+            cal_uuid = cal_svc.resolve_uuid(kalendaro)
+            if not cal_uuid:
+                error(tr_multi(
+                    f"Kalendaro ne trovita: {kalendaro}",
+                    f"Calendar not found: {kalendaro}",
+                    f"Calendrier non trouvé: {kalendaro}",
+                ))
+                raise typer.Exit(1)
+
+        rows = list_sync_queue(
+            db, stato=stato, calendar_uuid=cal_uuid,
+        )
+        if not rows:
+            info(tr_multi(
+                "Neniu sinkroniga tasko trovita.",
+                "No sync task found.",
+                "Aucune tache de synchronisation trouvee.",
+            ))
+            return
+
+        from A_organizi.cli.okazajo import _short
+
+        table = Table()
+        table.add_column("ID", style="cyan", width=12)
+        table.add_column(tr_multi("Kalendaro", "Calendar"), width=10)
+        table.add_column(tr_multi("Operacio", "Operation"), width=10)
+        table.add_column(tr_multi("Stato", "Status"), width=12)
+        table.add_column(tr_multi("Eraro", "Error"), width=40)
+        table.add_column(tr_multi("Kreita", "Created"), width=20)
+
+        for row in rows:
+            eraro = str(row.get("eraro") or "")
+            table.add_row(
+                str(row["id"])[:12],
+                str(row["calendar_uuid"])[:8],
+                str(row["operacio"]),
+                str(row["stato"]),
+                _short(eraro, 40) if eraro else "",
+                str(row.get("kreita_je", ""))[:19],
+            )
+        console.print(table)
 
     @app.command()
     def malfari(

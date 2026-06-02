@@ -500,6 +500,7 @@ __all__ = [
     "fetch_remote_calendar_payloads",
     "probe_calendar_config",
     "queue_sync",
+    "list_sync_queue",
     "push_event_to_remote",
     "delete_event_from_remote",
     "sync_worker",

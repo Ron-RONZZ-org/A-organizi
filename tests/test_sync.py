@@ -573,3 +573,106 @@ class TestSyncQueueIndex:
         rows = db.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_sync_queue_calendar_stato'")
         assert len(rows) == 1, "Index idx_sync_queue_calendar_stato not found in DB"
         assert rows[0]["name"] == "idx_sync_queue_calendar_stato"
+
+
+class TestListSyncQueue:
+    """Tests for list_sync_queue helper."""
+
+    @pytest.fixture
+    def db_with_jobs(self, tmp_path):
+        """Set up a DB with a few sync queue entries."""
+        import A_organizi.data.storage as storage_module
+        import uuid as uuid_mod
+
+        storage_module._db_instance = None
+        from A_organizi.data.storage import get_db
+
+        db = get_db()
+        cal_uuid = str(uuid_mod.uuid4())
+        now = "2026-06-02T12:00:00"
+
+        # Insert a calendar
+        db.execute(
+            "INSERT INTO kalendaroj (uuid, url, username, remote, kreita_je, modifita_je)"
+            " VALUES (?, ?, ?, 1, ?, ?)",
+            (cal_uuid, "https://example.com/cal", "user", now, now),
+        )
+
+        # Insert sync queue jobs with different statuses
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('job001', ?, 'push', '{\"e\":\"e1\"}', 'completed', '', '2026-06-02T10:00:00', '2026-06-02T10:00:00')",
+            (cal_uuid,),
+        )
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('job002', ?, 'pull', '{}', 'pending', '', '2026-06-02T11:00:00', '2026-06-02T11:00:00')",
+            (cal_uuid,),
+        )
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('job003', ?, 'push', '{\"e\":\"e2\"}', 'failed', 'HTTP 500', '2026-06-02T12:00:00', '2026-06-02T12:00:00')",
+            (cal_uuid,),
+        )
+
+        return db, cal_uuid
+
+    def test_empty(self, tmp_path):
+        """No entries returns empty list."""
+        import A_organizi.data.storage as storage_module
+        storage_module._db_instance = None
+        from A_organizi.data.storage import get_db
+        from A_organizi.utils.sync import list_sync_queue
+
+        db = get_db()
+        rows = list_sync_queue(db)
+        assert rows == []
+
+    def test_all(self, db_with_jobs):
+        """Returns all entries ordered newest first."""
+        db, _ = db_with_jobs
+        from A_organizi.utils.sync import list_sync_queue
+
+        rows = list_sync_queue(db)
+        assert len(rows) == 3
+        # Newest first (DESC by kreita_je)
+        assert rows[0]["id"] == "job003"
+        assert rows[1]["id"] == "job002"
+        assert rows[2]["id"] == "job001"
+
+    def test_filter_by_status(self, db_with_jobs):
+        """Filter by stato."""
+        db, _ = db_with_jobs
+        from A_organizi.utils.sync import list_sync_queue
+
+        rows = list_sync_queue(db, stato="pending")
+        assert len(rows) == 1
+        assert rows[0]["id"] == "job002"
+
+        rows = list_sync_queue(db, stato="completed")
+        assert len(rows) == 1
+        assert rows[0]["id"] == "job001"
+
+        rows = list_sync_queue(db, stato="failed")
+        assert len(rows) == 1
+        assert rows[0]["id"] == "job003"
+
+    def test_filter_by_calendar(self, db_with_jobs):
+        """Filter by calendar_uuid."""
+        db, cal_uuid = db_with_jobs
+        from A_organizi.utils.sync import list_sync_queue
+
+        rows = list_sync_queue(db, calendar_uuid=cal_uuid)
+        assert len(rows) == 3
+
+        rows = list_sync_queue(db, calendar_uuid="nonexistent")
+        assert len(rows) == 0
+
+    def test_filter_by_status_and_calendar(self, db_with_jobs):
+        """Combine status + calendar filter."""
+        db, cal_uuid = db_with_jobs
+        from A_organizi.utils.sync import list_sync_queue
+
+        rows = list_sync_queue(db, stato="failed", calendar_uuid=cal_uuid)
+        assert len(rows) == 1
+        assert rows[0]["eraro"] == "HTTP 500"
