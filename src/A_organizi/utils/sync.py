@@ -359,6 +359,38 @@ def start_sync_worker() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Sync queue queries
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def list_sync_queue(
+    con,
+    stato: str | None = None,
+    calendar_uuid: str | None = None,
+) -> list[dict[str, str]]:
+    """List sync queue entries, optionally filtered.
+
+    Args:
+        con: Database connection (from transaction() or service.db).
+        stato: Optional status filter (pending, running, completed, failed).
+        calendar_uuid: Optional calendar UUID filter.
+
+    Returns:
+        List of sync_queue row dicts, newest first.
+    """
+    query = "SELECT * FROM sync_queue WHERE 1=1"
+    params: list[str] = []
+    if stato:
+        query += " AND stato = ?"
+        params.append(stato)
+    if calendar_uuid:
+        query += " AND calendar_uuid = ?"
+        params.append(calendar_uuid)
+    query += " ORDER BY kreita_je DESC"
+    return con.execute(query, tuple(params))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Password management
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -369,9 +401,20 @@ def set_password(calendar_uuid: str, password: str) -> None:
     Args:
         calendar_uuid: Calendar UUID.
         password: Password to store.
+
+    Raises:
+        RuntimeError: If keyring is unavailable and install was declined.
     """
+    global keyring
     if keyring is None:
-        raise RuntimeError("keyring library not installed")
+        from A.utils.deps import ensure_dependency
+
+        try:
+            ensure_dependency("keyring", "keyring")
+            import keyring as kr
+            keyring = kr
+        except ImportError as exc:
+            raise RuntimeError("keyring library not installed") from exc
     keyring.set_password(_SERVICE_NAME, calendar_uuid, password)
 
 

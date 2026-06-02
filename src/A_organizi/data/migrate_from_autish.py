@@ -267,7 +267,10 @@ def _migrate_calendar_keyring(calendar_uuid: str) -> bool:
     Returns:
         True if password was migrated
     """
+    from A.utils.deps import ensure_dependency
+
     try:
+        ensure_dependency("keyring", "keyring")
         import keyring
     except ImportError:
         return False
