@@ -46,7 +46,7 @@ src/A_organizi/
 │   ├── okazajo_crud.py         # CRUD commands: ls, vidi, serci, modifi, forigi
 │   ├── okazajo_retposto.py     # Retposto import helpers (split from okazajo.py for 500-line limit)
 │   ├── okazajo_rrule.py        # RRULE validator + shorthand expander (RFC 5545)
-│   └── okazajo_util.py         # Event utilities (ICS import/export, sync, undo)
+│   └── okazajo_util.py         # Event utilities (ICS import/export, sync, undo, vici)
 ├── utils/
 │   ├── __init__.py
 │   ├── labels.py          # Shared label helpers (resolve_refs, parse_blob, etc.)
@@ -162,6 +162,8 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #29 | ✅ Done | Auto-sync push: events auto-push to CalDAV server on create/update/delete |
 | #30 | ✅ Done | okazajo aldoni UX: optional -k, date+time split, RRULE validation |
 | #31 | ✅ Done | PR merged — implementation of #30 |
+| #32 | ✅ Done | okazajo aldoni: positional titolo/komenco/fino, improved --ripeto help |
+| #33 | ✅ Done | okazajo vici: sync queue monitor command |
 
 ## Migration from autish
 
