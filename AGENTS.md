@@ -165,6 +165,8 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #32 | ✅ Done | okazajo aldoni: positional titolo/komenco/fino, improved --ripeto help |
 | #33 | ✅ Done | okazajo vici: sync queue monitor command |
 | #35 | ✅ Done | CalDAV push 403 fix: store remote_href from REPORT, use for PUT/DELETE |
+| #36 | ✅ Done | CalDAV 403 fix: add User-Agent header to http_fetch_text (Cloudflare WAF block); improve error messages |
+| — | ✅ Done | vici default hides completed jobs; add --all flag (293 tests) |
 
 ## Migration from autish
 
