@@ -80,7 +80,8 @@ def http_fetch_text(
 
     # Default headers
     req.add_header("Content-Type", "text/plain; charset=utf-8")
-    req.add_header("Accept", "text/html, application/xml, */*")
+    req.add_header("Accept", "application/xml, text/calendar, text/html, */*")
+    req.add_header("User-Agent", "A-organizi/1.0")
 
     if headers:
         for k, v in headers.items():
@@ -302,7 +303,8 @@ def process_sync_job(db, job: dict) -> None:
             raise ValueError(f"Unknown operation: {operacio}")
 
         db.execute(
-            "UPDATE sync_queue SET stato = 'completed' WHERE id = ?", (job_id,)
+            "UPDATE sync_queue SET stato = 'completed', eraro = '' WHERE id = ?",
+            (job_id,),
         )
 
     except Exception as exc:
