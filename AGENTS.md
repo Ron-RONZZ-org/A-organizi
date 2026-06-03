@@ -167,6 +167,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #35 | ✅ Done | CalDAV push 403 fix: store remote_href from REPORT, use for PUT/DELETE |
 | #36 | ✅ Done | CalDAV 403 fix: add User-Agent header to http_fetch_text (Cloudflare WAF block); improve error messages |
 | — | ✅ Done | vici default hides completed jobs; add --all flag (293 tests) |
+| #37 | ✅ Done | Pull sync now imports remote-only events (previously silently dropped). Uses remote UID as local UUID for round-trip consistency. Dedup by content (title+start+end). |
 
 ## Migration from autish
 
