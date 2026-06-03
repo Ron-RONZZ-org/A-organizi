@@ -11,6 +11,7 @@ from A.utils.output import console, print_table
 
 from A_organizi.service.kalendaro import get_kalendaro_service
 from A_organizi.utils.sync import (
+    http_error,
     http_fetch_text,
     probe_calendar_config,
     remote_http_url,
@@ -149,9 +150,9 @@ def modifi(
         is_remote = low_url.startswith(("http://", "https://", "caldav://"))
         new_username = uzantnomo.strip() if uzantnomo else ""
         if is_remote and pasvorto:
-            status, _ = http_fetch_text(remote_http_url(url), new_username, pasvorto)
+            status, resp_body = http_fetch_text(remote_http_url(url), new_username, pasvorto)
             if status not in (200, 207, 404):
-                error(f"Ne povis aliri kalendaron (eraro {status}).")
+                error(http_error(status, "Calendar access", resp_body))
                 raise typer.Exit(1)
         update["url"] = url.strip()
         update["remote"] = "1" if is_remote else "0"

@@ -140,7 +140,7 @@ def fetch_remote_calendar_payloads(
     elif status == 404:
         return []
     else:
-        raise RuntimeError(f"CalDAV fetch failed: {status}")
+        raise RuntimeError(f"CalDAV fetch failed: {status} — {text[:200] if text else 'no body'}")
 
 
 def _parse_multistatus(text: str) -> list[tuple[str, str]]:
@@ -234,6 +234,11 @@ def process_sync_job(db, job: dict) -> None:
         url = cal["url"]
         username = cal["username"]
         password = get_password(cal_uuid)
+        if not password:
+            raise ValueError(
+                "Password not found in keyring. "
+                "Set it with: A organizi kalendaro modifi <uuid> --pasvorto <password>"
+            )
 
         if operacio == "pull":
             results = fetch_remote_calendar_payloads(url, username, password)
@@ -334,7 +339,7 @@ def sync_worker() -> None:
 _HTTP_DESCRIPTION: dict[int, str] = {
     400: "Bad Request",
     401: "Unauthorized — check username and password",
-    403: "Forbidden — check credentials or calendar permissions",
+    403: "Forbidden — check credentials or calendar permissions; for Nextcloud, the app password may have been revoked (regenerate in Security settings)",
     404: "Not Found — check calendar URL",
     405: "Method Not Allowed",
     408: "Request Timeout",
@@ -346,10 +351,24 @@ _HTTP_DESCRIPTION: dict[int, str] = {
 }
 
 
-def _http_error(status: int, operation: str) -> str:
-    """Build a descriptive HTTP error message."""
+def http_error(status: int, operation: str, body: str = "") -> str:
+    """Build a descriptive HTTP error message.
+
+    Args:
+        status: HTTP status code.
+        operation: Operation name (e.g. "CalDAV PUT").
+        body: Optional server response body (appended if short and informative).
+
+    Returns:
+        Formatted error message string.
+    """
     desc = _HTTP_DESCRIPTION.get(status, f"HTTP {status}")
-    return f"{operation} failed: {desc}"
+    msg = f"{operation} failed: {desc}"
+    if body:
+        snippet = body.strip()[:120]
+        if snippet:
+            msg += f" — server: {snippet}"
+    return msg
 
 
 def _event_url(url: str, event_uuid: str, remote_href: str | None = None) -> str:
@@ -404,11 +423,13 @@ def push_event_to_remote(
     headers = {
         "Content-Type": "text/calendar; charset=utf-8",
     }
-    status, _ = http_fetch_text(
+    status, resp_body = http_fetch_text(
         put_url, username, password, "PUT", ics_payload, headers
     )
     if status not in (200, 201, 204):
-        raise RuntimeError(_http_error(status, "CalDAV PUT"))
+        msg = http_error(status, "CalDAV PUT", resp_body)
+        msg += f" — URL: {put_url}"
+        raise RuntimeError(msg)
     return status
 
 
@@ -435,11 +456,11 @@ def delete_event_from_remote(
         RuntimeError: If the server returns an unexpected status.
     """
     delete_url = _event_url(url, event_uuid, remote_href)
-    status, _ = http_fetch_text(
+    status, resp_body = http_fetch_text(
         delete_url, username, password, "DELETE"
     )
     if status not in (200, 204, 404):
-        raise RuntimeError(_http_error(status, "CalDAV DELETE"))
+        raise RuntimeError(http_error(status, "CalDAV DELETE", resp_body))
     return status
 
 
@@ -601,14 +622,17 @@ def probe_calendar_config(
         raise ValueError("Password is required for remote calendar.")
 
     https_url = remote_http_url(url)
-    status, _ = http_fetch_text(https_url, username, password)
+    status, resp_body = http_fetch_text(https_url, username, password)
 
     if status == 401 or status == 403:
-        raise ValueError("Invalid username or password.")
+        msg = "Invalid username or password."
+        if resp_body.strip():
+            msg += f" Server: {resp_body.strip()[:120]}"
+        raise ValueError(msg)
     if status == 404:
         raise ValueError("Calendar not found at URL.")
     if status not in (200, 207):
-        raise ValueError(_http_error(status, "Calendar access"))
+        raise ValueError(http_error(status, "Calendar access", resp_body))
 
     # Try to get event count via CalDAV REPORT
     try:
@@ -626,6 +650,7 @@ def probe_calendar_config(
 __all__ = [
     "remote_http_url",
     "http_fetch_text",
+    "http_error",
     "fetch_remote_calendar_payloads",
     "probe_calendar_config",
     "queue_sync",
