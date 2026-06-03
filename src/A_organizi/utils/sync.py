@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Lock, Thread
 from typing import Any
 
@@ -178,6 +178,99 @@ def _parse_multistatus(text: str) -> list[tuple[str, str]]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Pull import helper
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _import_remote_event(
+    db,
+    calendar_uuid: str,
+    href: str,
+    ics_data: str,
+    uid: str,
+) -> int:
+    """Import a remote-only event into the local database.
+
+    Parses the ICS calendar data, converts fields to the local schema,
+    and inserts using the remote UID as the local UUID for round-trip
+    consistency.  Skips duplicate events (detected by content match on
+    title + start + end).
+
+    Args:
+        db: SQLiteDB instance.
+        calendar_uuid: Calendar UUID to associate the event with.
+        href: Remote CalDAV resource path.
+        ics_data: ICS calendar text (VCALENDAR wrapper).
+        uid: UID extracted from the ICS data.
+
+    Returns:
+        1 if the event was imported, 0 if skipped (duplicate).
+    """
+    from A_organizi.utils.ics import iter_ics_events, ics_dt, _to_iso, event_exists
+
+    events = iter_ics_events(ics_data)
+    if not events:
+        return 0
+
+    event = events[0]
+    dtstart_raw = str(event.get("DTSTART") or "").strip()
+    if not dtstart_raw:
+        return 0
+
+    start = _to_iso(ics_dt(dtstart_raw))
+    end = _to_iso(
+        ics_dt(str(event.get("DTEND", dtstart_raw)).strip())
+    )
+    title = str(event.get("SUMMARY", ""))
+
+    # Dedup by content: skip if same title + start + end already exists locally
+    if event_exists(db, calendar_uuid, title, start, end):
+        return 0
+
+    # Safety net: UID already present (race between outer check and here)
+    existing = db.execute_one(
+        "SELECT uuid FROM eventoj WHERE uuid = ? AND kalendaro_uuid = ?",
+        (uid, calendar_uuid),
+    )
+    if existing:
+        db.execute(
+            "UPDATE eventoj SET remote_href = ? WHERE uuid = ?",
+            (href, uid),
+        )
+        return 0
+
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    partoprenantoj_list: list[str] = []
+    if "ATTENDEE" in event:
+        partoprenantoj_list.append(str(event["ATTENDEE"]))
+
+    with db.transaction() as conn:
+        conn.execute(
+            "INSERT INTO eventoj ("
+            "uuid, kalendaro_uuid, titolo, komenco, fino, "
+            "kategorio, loko, ripeto, partoprenantoj, priskribo, "
+            "remote_href, kreita_je, modifita_je"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                uid,
+                calendar_uuid,
+                title,
+                start,
+                end,
+                str(event.get("CATEGORIES", "")),
+                str(event.get("LOCATION", "")),
+                str(event.get("RRULE", "")),
+                json.dumps(partoprenantoj_list, ensure_ascii=False),
+                str(event.get("DESCRIPTION", "")),
+                href,
+                ts,
+                ts,
+            ),
+        )
+    return 1
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Sync queue
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -243,7 +336,8 @@ def process_sync_job(db, job: dict) -> None:
 
         if operacio == "pull":
             results = fetch_remote_calendar_payloads(url, username, password)
-            stored = 0
+            updated = 0
+            imported = 0
             for href, ics_data in results:
                 uid_match = re.search(r"^UID:(.+)$", ics_data, re.MULTILINE)
                 if uid_match:
@@ -257,10 +351,14 @@ def process_sync_job(db, job: dict) -> None:
                             "UPDATE eventoj SET remote_href = ? WHERE uuid = ?",
                             (href, uid),
                         )
-                        stored += 1
+                        updated += 1
+                    else:
+                        imported += _import_remote_event(
+                            db, cal_uuid, href, ics_data, uid
+                        )
             info(
-                f"[sync] Pulled {len(results)} events, "
-                f"updated {stored} remote_hrefs from {cal_uuid[:8]}"
+                f"[sync] Pulled {len(results)} events: "
+                f"{updated} updated, {imported} imported from {cal_uuid[:8]}"
             )
         elif operacio == "push":
             sub_op = payload.get("operation", "")

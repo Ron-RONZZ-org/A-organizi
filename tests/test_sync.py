@@ -3,36 +3,42 @@
 from __future__ import annotations
 
 import json
+import sys
 import pytest
 from unittest.mock import MagicMock, patch
 
-# Mock keyring before importing sync module
-mock_keyring = MagicMock()
-mock_keyring.set_password = MagicMock()
-mock_keyring.get_password = MagicMock(return_value="test_password")
-mock_keyring.delete_password = MagicMock()
+# Install keyring mock permanently in sys.modules so modules loaded during
+# imports remain cached.  Using patch.dict("sys.modules", ...) would remove
+# them on exit, causing duplicate module namespaces where function
+# __globals__ references a different dict than the patched module.
+_mock_keyring = MagicMock()
+_mock_keyring.set_password = MagicMock()
+_mock_keyring.get_password = MagicMock(return_value="test_password")
+_mock_keyring.delete_password = MagicMock()
+sys.modules["keyring"] = _mock_keyring
 
-with patch.dict("sys.modules", {"keyring": mock_keyring}):
-    from A_organizi.utils.sync import (
-        remote_http_url,
-        http_fetch_text,
-        fetch_remote_calendar_payloads,
-        _parse_multistatus,
-        _event_url,
-        push_event_to_remote,
-        delete_event_from_remote,
-        set_password,
-        get_password,
-        delete_password,
-    )
-    from A_organizi.utils.undo import (
-        push_undo,
-        list_undos,
-        apply_undo,
-        record_delete_calendar,
-        record_delete_event,
-        record_import,
-    )
+from A_organizi.utils.sync import (
+    remote_http_url,
+    http_fetch_text,
+    fetch_remote_calendar_payloads,
+    _parse_multistatus,
+    _event_url,
+    _import_remote_event,
+    process_sync_job,
+    push_event_to_remote,
+    delete_event_from_remote,
+    set_password,
+    get_password,
+    delete_password,
+)
+from A_organizi.utils.undo import (
+    push_undo,
+    list_undos,
+    apply_undo,
+    record_delete_calendar,
+    record_delete_event,
+    record_import,
+)
 
 
 class TestSyncUtils:
@@ -124,23 +130,23 @@ END:VCALENDAR</c:calendar-data>
 class TestPasswordManagement:
     """Tests for password management."""
 
-    @patch("A_organizi.utils.sync.keyring", mock_keyring)
+    @patch("A_organizi.utils.sync.keyring", _mock_keyring)
     def test_set_password(self):
         """Set password in keyring."""
         set_password("cal-uuid-123", "secret")
-        mock_keyring.set_password.assert_called_once()
+        _mock_keyring.set_password.assert_called_once()
 
-    @patch("A_organizi.utils.sync.keyring", mock_keyring)
+    @patch("A_organizi.utils.sync.keyring", _mock_keyring)
     def test_get_password(self):
         """Get password from keyring."""
         password = get_password("cal-uuid-123")
         assert password == "test_password"
 
-    @patch("A_organizi.utils.sync.keyring", mock_keyring)
+    @patch("A_organizi.utils.sync.keyring", _mock_keyring)
     def test_delete_password(self):
         """Delete password from keyring."""
         delete_password("cal-uuid-123")
-        mock_keyring.delete_password.assert_called_once()
+        _mock_keyring.delete_password.assert_called_once()
 
 
 class TestUndoUtils:
@@ -938,3 +944,321 @@ class TestReprovi:
         count = reprovi_sync_job(db, calendar_uuid="nonexistent")
         assert count == 0
         mock_process.assert_not_called()
+
+
+class TestSyncPullImport:
+    """Tests for remote event import during pull."""
+
+    ICS_EVENT_1 = """\
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//EN
+BEGIN:VEVENT
+UID:remote-uid-001
+DTSTART:20260701T090000Z
+DTEND:20260701T100000Z
+SUMMARY:Remote Event 1
+LOCATION:Conference Room
+DESCRIPTION:Imported from server
+CATEGORIES:MEETING
+END:VEVENT
+END:VCALENDAR"""
+
+    ICS_EVENT_2 = """\
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//EN
+BEGIN:VEVENT
+UID:remote-uid-002
+DTSTART:20260702T140000Z
+DTEND:20260702T150000Z
+SUMMARY:Remote Event 2
+LOCATION:Online
+RRULE:FREQ=WEEKLY;BYDAY=MO
+END:VEVENT
+END:VCALENDAR"""
+
+    ICS_NO_DTSTART = """\
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//EN
+BEGIN:VEVENT
+UID:remote-uid-003
+SUMMARY:No DTSTART Event
+END:VEVENT
+END:VCALENDAR"""
+
+    def _setup_db(self, tmp_path):
+        """Create fresh DB with a remote calendar and one existing event."""
+        import A_organizi.data.storage as storage_module
+        import uuid as uuid_mod
+
+        storage_module._db_instance = None
+        from A_organizi.data.storage import get_db
+
+        db = get_db()
+        cal_uuid = str(uuid_mod.uuid4())
+        now = "2026-06-02T12:00:00"
+
+        db.execute(
+            "INSERT INTO kalendaroj (uuid, url, username, remote, kreita_je, modifita_je)"
+            " VALUES (?, ?, ?, 1, ?, ?)",
+            (cal_uuid, "https://example.com/cal", "user", now, now),
+        )
+
+        # Insert an existing local event (will match remote via UID in some tests)
+        existing_uuid = "local-event-001"
+        db.execute(
+            "INSERT INTO eventoj ("
+            "uuid, kalendaro_uuid, titolo, komenco, fino, "
+            "kategorio, loko, ripeto, partoprenantoj, priskribo, "
+            "remote_href, kreita_je, modifita_je"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                existing_uuid,
+                cal_uuid,
+                "Local Event",
+                "2026-07-01T09:00:00+00:00",
+                "2026-07-01T10:00:00+00:00",
+                "",
+                "",
+                "",
+                "[]",
+                "",
+                "",
+                now,
+                now,
+            ),
+        )
+
+        return db, cal_uuid, existing_uuid, now
+
+    def _count_events(self, db, cal_uuid):
+        """Return number of events for given calendar."""
+        row = db.execute_one(
+            "SELECT COUNT(*) AS cnt FROM eventoj WHERE kalendaro_uuid = ?",
+            (cal_uuid,),
+        )
+        return row["cnt"] if row else 0
+
+    # ── _import_remote_event unit tests ──────────────────────────────────
+
+    def test_import_new_event(self, tmp_path):
+        """Remote-only event is imported into the local database."""
+        db, cal_uuid, _, _ = self._setup_db(tmp_path)
+
+        result = _import_remote_event(
+            db, cal_uuid, "/cal/remote-001.ics", self.ICS_EVENT_1, "remote-uid-001"
+        )
+
+        assert result == 1
+        assert self._count_events(db, cal_uuid) == 2
+
+        row = db.execute_one(
+            "SELECT * FROM eventoj WHERE uuid = ?", ("remote-uid-001",)
+        )
+        assert row is not None
+        assert row["titolo"] == "Remote Event 1"
+        assert row["loko"] == "Conference Room"
+        assert row["priskribo"] == "Imported from server"
+        assert row["kategorio"] == "MEETING"
+        assert row["remote_href"] == "/cal/remote-001.ics"
+
+    def test_import_event_with_rrule(self, tmp_path):
+        """Remote event with RRULE is imported and ripeto column is set."""
+        db, cal_uuid, _, _ = self._setup_db(tmp_path)
+
+        result = _import_remote_event(
+            db, cal_uuid, "/cal/remote-002.ics", self.ICS_EVENT_2, "remote-uid-002"
+        )
+
+        assert result == 1
+        row = db.execute_one(
+            "SELECT * FROM eventoj WHERE uuid = ?", ("remote-uid-002",)
+        )
+        assert row is not None
+        assert row["titolo"] == "Remote Event 2"
+        assert row["loko"] == "Online"
+        assert row["ripeto"] == "FREQ=WEEKLY;BYDAY=MO"
+
+    def test_import_skip_duplicate_uid(self, tmp_path):
+        """Event with existing local UUID is skipped; remote_href is updated."""
+        db, cal_uuid, existing_uuid, _ = self._setup_db(tmp_path)
+
+        # Pretend the remote has local-event-001 as its UID
+        result = _import_remote_event(
+            db, cal_uuid, "/cal/local-001.ics", self.ICS_EVENT_1, existing_uuid
+        )
+
+        # UID already exists → function updates remote_href, returns 0
+        assert result == 0
+        assert self._count_events(db, cal_uuid) == 1
+
+        row = db.execute_one(
+            "SELECT remote_href FROM eventoj WHERE uuid = ?", (existing_uuid,)
+        )
+        assert row["remote_href"] == "/cal/local-001.ics"
+
+    def test_import_skip_duplicate_content(self, tmp_path):
+        """Event with same title+start+end as existing is skipped."""
+        db, cal_uuid, _, _ = self._setup_db(tmp_path)
+
+        # ICS with same content as Local Event but different UID
+        duplicate_ics = """\
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//EN
+BEGIN:VEVENT
+UID:another-uid
+DTSTART:20260701T090000Z
+DTEND:20260701T100000Z
+SUMMARY:Local Event
+END:VEVENT
+END:VCALENDAR"""
+
+        result = _import_remote_event(
+            db, cal_uuid, "/cal/another.ics", duplicate_ics, "another-uid"
+        )
+
+        assert result == 0
+        assert self._count_events(db, cal_uuid) == 1
+
+    def test_import_skip_no_dtstart(self, tmp_path):
+        """Event without DTSTART is skipped."""
+        db, cal_uuid, _, _ = self._setup_db(tmp_path)
+
+        result = _import_remote_event(
+            db, cal_uuid, "/cal/no-dtstart.ics", self.ICS_NO_DTSTART, "remote-uid-003"
+        )
+
+        assert result == 0
+        assert self._count_events(db, cal_uuid) == 1
+
+    def test_import_skip_empty_ics(self, tmp_path):
+        """Empty ICS data is skipped."""
+        db, cal_uuid, _, _ = self._setup_db(tmp_path)
+
+        result = _import_remote_event(
+            db, cal_uuid, "/cal/empty.ics", "BEGIN:VCALENDAR\nEND:VCALENDAR", "empty"
+        )
+
+        assert result == 0
+        assert self._count_events(db, cal_uuid) == 1
+
+    # ── Integration tests via process_sync_job ──────────────────────────
+
+    def test_process_sync_pull_imports_new_events(self, tmp_path):
+        """Pull via process_sync_job imports remote-only events."""
+        db, cal_uuid, _, now = self._setup_db(tmp_path)
+
+        with (
+            patch("A_organizi.utils.sync.fetch_remote_calendar_payloads") as mock_fetch,
+            patch("A_organizi.utils.sync.get_password", return_value="secret"),
+        ):
+            mock_fetch.return_value = [
+                ("/cal/remote-001.ics", self.ICS_EVENT_1),
+                ("/cal/remote-002.ics", self.ICS_EVENT_2),
+            ]
+
+            # Insert job into sync_queue so process_sync_job can update status
+            db.execute(
+                "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("pull-job-1", cal_uuid, "pull", "{}", "pending", "", now, now),
+            )
+            job = dict(db.execute_one("SELECT * FROM sync_queue WHERE id = ?", ("pull-job-1",)))
+            process_sync_job(db, job)
+
+        # 1 existing + 2 imported = 3
+        assert self._count_events(db, cal_uuid) == 3
+
+        # Verify both imported events exist
+        ev1 = db.execute_one(
+            "SELECT titolo FROM eventoj WHERE uuid = ?", ("remote-uid-001",)
+        )
+        assert ev1 is not None
+        assert ev1["titolo"] == "Remote Event 1"
+
+        ev2 = db.execute_one(
+            "SELECT titolo FROM eventoj WHERE uuid = ?", ("remote-uid-002",)
+        )
+        assert ev2 is not None
+        assert ev2["titolo"] == "Remote Event 2"
+
+        # Job should be marked completed
+        job_row = db.execute_one("SELECT stato FROM sync_queue WHERE id = ?", ("pull-job-1",))
+        assert job_row["stato"] == "completed"
+
+    def test_process_sync_pull_known_event_updates_href(self, tmp_path):
+        """Pull with known UID updates remote_href for existing event."""
+        db, cal_uuid, existing_uuid, now = self._setup_db(tmp_path)
+
+        with (
+            patch("A_organizi.utils.sync.fetch_remote_calendar_payloads") as mock_fetch,
+            patch("A_organizi.utils.sync.get_password", return_value="secret"),
+        ):
+            # Remote returns an event with the same UID as the local event
+            known_ics = self.ICS_EVENT_1.replace("remote-uid-001", existing_uuid)
+            mock_fetch.return_value = [
+                ("/cal/local-001.ics", known_ics),
+            ]
+
+            # Insert job into sync_queue
+            db.execute(
+                "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("pull-job-2", cal_uuid, "pull", "{}", "pending", "", now, now),
+            )
+            job = dict(db.execute_one("SELECT * FROM sync_queue WHERE id = ?", ("pull-job-2",)))
+            process_sync_job(db, job)
+
+        # No new event created
+        assert self._count_events(db, cal_uuid) == 1
+
+        # remote_href should be updated
+        row = db.execute_one(
+            "SELECT remote_href FROM eventoj WHERE uuid = ?", (existing_uuid,)
+        )
+        assert row["remote_href"] == "/cal/local-001.ics"
+
+        # Job completed
+        job_row = db.execute_one("SELECT stato FROM sync_queue WHERE id = ?", ("pull-job-2",))
+        assert job_row["stato"] == "completed"
+
+    def test_process_sync_pull_mixed_known_and_new(self, tmp_path):
+        """Pull with mix of known and unknown UIDs: updates + imports."""
+        db, cal_uuid, existing_uuid, _ = self._setup_db(tmp_path)
+
+        with (
+            patch("A_organizi.utils.sync.fetch_remote_calendar_payloads") as mock_fetch,
+            patch("A_organizi.utils.sync.get_password", return_value="secret"),
+        ):
+            known_ics = self.ICS_EVENT_1.replace("remote-uid-001", existing_uuid)
+            mock_fetch.return_value = [
+                ("/cal/local-001.ics", known_ics),   # known UID → update
+                ("/cal/remote-002.ics", self.ICS_EVENT_2),  # new → import
+            ]
+
+            job = {
+                "id": "pull-job-3",
+                "calendar_uuid": cal_uuid,
+                "operacio": "pull",
+                "payload": "{}",
+            }
+            process_sync_job(db, job)
+
+        # 1 existing + 1 imported = 2
+        assert self._count_events(db, cal_uuid) == 2
+
+        # Known event updated
+        row = db.execute_one(
+            "SELECT remote_href FROM eventoj WHERE uuid = ?", (existing_uuid,)
+        )
+        assert row["remote_href"] == "/cal/local-001.ics"
+
+        # New event imported
+        new_row = db.execute_one(
+            "SELECT titolo FROM eventoj WHERE uuid = ?", ("remote-uid-002",)
+        )
+        assert new_row is not None
+        assert new_row["titolo"] == "Remote Event 2"

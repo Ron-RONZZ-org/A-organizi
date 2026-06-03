@@ -3,3 +3,6 @@ __pycache__/
 # Serena (track memories, ignore config/cache)
 .serena/cache/
 .serena/project*.yml
+
+# Serena memories (tool internal state)
+.serena/memories/
