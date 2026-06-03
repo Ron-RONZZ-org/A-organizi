@@ -517,14 +517,16 @@ def reprovi_sync_job(
 
 def list_sync_queue(
     con,
-    stato: str | None = None,
+    stato: str | tuple[str, ...] | None = None,
     calendar_uuid: str | None = None,
 ) -> list[dict[str, str]]:
     """List sync queue entries, optionally filtered.
 
     Args:
         con: Database connection (from transaction() or service.db).
-        stato: Optional status filter (pending, running, completed, failed).
+        stato: Optional status filter — a single status string (e.g. ``"pending"``)
+            or a tuple of statuses (e.g. ``("pending", "failed")``).
+            ``None`` means no status filter (returns all).
         calendar_uuid: Optional calendar UUID filter.
 
     Returns:
@@ -532,9 +534,14 @@ def list_sync_queue(
     """
     query = "SELECT * FROM sync_queue WHERE 1=1"
     params: list[str] = []
-    if stato:
-        query += " AND stato = ?"
-        params.append(stato)
+    if stato is not None:
+        if isinstance(stato, (list, tuple)):
+            placeholders = ",".join("?" for _ in stato)
+            query += f" AND stato IN ({placeholders})"
+            params.extend(stato)
+        else:
+            query += " AND stato = ?"
+            params.append(stato)
     if calendar_uuid:
         query += " AND calendar_uuid = ?"
         params.append(calendar_uuid)

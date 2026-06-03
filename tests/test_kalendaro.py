@@ -862,6 +862,83 @@ class TestViciCLI:
         assert "STATO" in result.output
         assert "--kalendaro" in result.output
 
+    def test_vici_hides_completed_by_default(self):
+        """Default vici hides completed jobs, shows only pending/failed."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.service.kalendaro import get_evento_service
+        db = get_evento_service().db
+        now = "2026-06-03T12:00:00"
+        # Insert a completed job
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('done-job', ?, 'push', '{}', 'completed', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+        # Insert a pending job
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('pend-job', ?, 'push', '{}', 'pending', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+
+        result = runner.invoke(app, ["okazajo", "vici"])
+        assert result.exit_code == 0, result.output
+        assert "pend-job" in result.output or "pend" in result.output
+        assert "done-job" not in result.output
+
+    def test_vici_all_shows_completed(self):
+        """vici --all shows all statuses including completed."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.service.kalendaro import get_evento_service
+        db = get_evento_service().db
+        now = "2026-06-03T12:00:00"
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('done-job', ?, 'push', '{}', 'completed', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+
+        result = runner.invoke(app, ["okazajo", "vici", "--all"])
+        assert result.exit_code == 0, result.output
+        assert "done-job" in result.output or "done" in result.output
+
+    def test_vici_completed_filter_still_works(self):
+        """vici completed still shows only completed jobs."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.service.kalendaro import get_evento_service
+        db = get_evento_service().db
+        now = "2026-06-03T12:00:00"
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('done-job', ?, 'push', '{}', 'completed', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('pend-job', ?, 'push', '{}', 'pending', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+
+        result = runner.invoke(app, ["okazajo", "vici", "completed"])
+        assert result.exit_code == 0, result.output
+        assert "done-job" in result.output or "done" in result.output
+        assert "pend-job" not in result.output
+
 
 class TestReproviCLI:
     """Tests for okazajo reprovi (retry failed sync jobs)."""

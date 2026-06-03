@@ -128,9 +128,12 @@ def register_extra_commands(app: typer.Typer) -> None:
         stato: Optional[str] = typer.Argument(
             None,
             help=tr_multi(
-                "Filtri lau stato (pending/running/completed/failed).",
-                "Filter by status (pending/running/completed/failed).",
-                "Filtrer par statut (pending/running/completed/failed).",
+                "Filtri lau stato (pending/running/completed/failed). "
+                "Defaŭlte montras nur pending kaj failed. Uzu --all por ĉiuj.",
+                "Filter by status (pending/running/completed/failed). "
+                "Default shows only pending and failed. Use --all for all.",
+                "Filtrer par statut (pending/running/completed/failed). "
+                "Par défaut montre seulement pending et failed. Utilisez --all pour tout.",
             ),
         ),
         kalendaro: Optional[str] = typer.Option(
@@ -139,6 +142,14 @@ def register_extra_commands(app: typer.Typer) -> None:
                 "Filtri lau kalendaro UUID.",
                 "Filter by calendar UUID.",
                 "Filtrer par UUID de calendrier.",
+            ),
+        ),
+        show_all: bool = typer.Option(
+            False, "--all", "-a",
+            help=tr_multi(
+                "Montri ĉiujn statojn (inkluzive completed).",
+                "Show all statuses (including completed).",
+                "Afficher tous les statuts (y compris completed).",
             ),
         ),
     ) -> None:
@@ -159,8 +170,14 @@ def register_extra_commands(app: typer.Typer) -> None:
                 ))
                 raise typer.Exit(1)
 
+        # Default: show only pending/failed (actionable states).
+        # Explicit stato arg or --all overrides this.
+        stato_filter: str | tuple[str, ...] | None = stato
+        if stato_filter is None and not show_all:
+            stato_filter = ("pending", "failed")
+
         rows = list_sync_queue(
-            db, stato=stato, calendar_uuid=cal_uuid,
+            db, stato=stato_filter, calendar_uuid=cal_uuid,
         )
         if not rows:
             info(tr_multi(
