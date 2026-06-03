@@ -197,5 +197,39 @@ Features:
 - Preserves timestamps
 - Idempotent
 
+## Testing
+
+### Common Pitfall: `patch.dict("sys.modules", ...)`
+
+Do **not** wrap **the module-under-test's import** inside a `patch.dict("sys.modules", {...})` block.
+Upon exiting the context, `patch.dict` restores `sys.modules` to its original state, which
+**removes all modules that were imported during the block** (not just the mocked dependency).
+
+This causes a **silent mock failure**: functions imported during the block retain a reference to
+the deleted module's `__globals__` dict, while `@patch()` patches the *new* module's dict.
+The result is that `@patch` decorators appear to work (the module attribute is a Mock) but
+functions still call the real implementation because they use the stale `__globals__`.
+
+**If all tests need the mocked dependency**, use a permanent install:
+
+```python
+import sys
+from unittest.mock import MagicMock
+sys.modules["keyring"] = MagicMock()   # permanent — modules stay cached
+from A_organizi.utils.sync import ...  # safe: install first, then import
+```
+
+**If different tests need opposite states** (mocked vs missing), `patch.dict` is acceptable
+**only if** the module-under-test's import happens outside the block, and only lazy optional
+dependencies are mocked inside:
+
+```python
+from mymodule import myfunc  # ← module-level, outside patch.dict
+
+def test_with_mock():
+    with patch.dict("sys.modules", {"optional_dep": Mock()}):
+        myfunc()  # safe: myfunc lazily imports optional_dep inside
+```
+
 ## Branch Convention
 All A-* repos use `main` as the primary branch. Use `main` for all development.
