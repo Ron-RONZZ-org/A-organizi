@@ -39,7 +39,8 @@ src/A_organizi/
 ├── cli/              # CLI package (split to avoid 500+ line monoliths)
 │   ├── __init__.py   # Main Typer app, sub-typer registrations
 │   ├── etikedi.py    # etikedoj (labels) commands
-│   ├── todo.py       # todo commands
+│   ├── todo.py       # todo app + helpers + aldoni
+│   ├── todo_crud.py  # todo CRUD commands: ls, vidi, modifi, forigi, serci
 │   ├── taglibro.py   # taglibro commands
 │   ├── kalendaro.py  # kalendaro (calendar management) commands
 │   ├── okazajo.py              # okazajo aldoni + helpers (<500 lines)
@@ -168,6 +169,7 @@ All A-ecosystem development **must** use `uv` as the package manager:
 | #36 | ✅ Done | CalDAV 403 fix: add User-Agent header to http_fetch_text (Cloudflare WAF block); improve error messages |
 | — | ✅ Done | vici default hides completed jobs; add --all flag (293 tests) |
 | #37 | ✅ Done | Pull sync now imports remote-only events (previously silently dropped). Uses remote UID as local UUID for round-trip consistency. Dedup by content (title+start+end). |
+| #38 | ✅ Done | todo: add `ls` command, strip `#` from UUID display, use Rich Panel for `vidi` |
 
 ## Migration from autish
 
