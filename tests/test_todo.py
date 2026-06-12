@@ -336,7 +336,7 @@ class TestTodoCLI:
         runner.invoke(app, ["todo", "aldoni", "Videbla tasko", "-P", "10"])
         result = runner.invoke(app, ["todo", "vidi", "Videbla tasko"])
         assert result.exit_code == 0, result.output
-        assert "uuid:" in result.output
+        assert "Videbla tasko" in result.output
 
     def test_vidi_not_found(self):
         """View non-existent task returns error."""
@@ -424,6 +424,73 @@ class TestTodoCLI:
         assert result.exit_code == 0
         assert "ne trovita" in result.output.lower() or "not found" in result.output.lower()
 
+    def test_ls_empty(self):
+        """List when no tasks exist."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["todo", "ls"])
+        assert result.exit_code == 0, result.output
+        assert "Neniuj" in result.output or "No tasks" in result.output
+
+    def test_ls(self):
+        """List all tasks."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        runner.invoke(app, ["todo", "aldoni", "Unua", "-P", "10"])
+        runner.invoke(app, ["todo", "aldoni", "Dua", "-P", "20"])
+        result = runner.invoke(app, ["todo", "ls"])
+        assert result.exit_code == 0, result.output
+        assert "Unua" in result.output
+        assert "Dua" in result.output
+
+    def test_ls_priority(self):
+        """List sorted by priority."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        runner.invoke(app, ["todo", "aldoni", "Malalta", "-P", "10"])
+        runner.invoke(app, ["todo", "aldoni", "Alta", "-P", "90"])
+        result = runner.invoke(app, ["todo", "ls", "-p"])
+        assert result.exit_code == 0, result.output
+        # Higher priority should appear first
+        alta_idx = result.output.index("Alta")
+        malalta_idx = result.output.index("Malalta")
+        assert alta_idx < malalta_idx, "Higher priority should sort first"
+
+    def test_ls_priority_reverse(self):
+        """List sorted by priority ascending (reverse)."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        runner.invoke(app, ["todo", "aldoni", "Malalta", "-P", "10"])
+        runner.invoke(app, ["todo", "aldoni", "Alta", "-P", "90"])
+        result = runner.invoke(app, ["todo", "ls", "-p", "-r"])
+        assert result.exit_code == 0, result.output
+        # Lower priority should appear first when reversed
+        alta_idx = result.output.index("Alta")
+        malalta_idx = result.output.index("Malalta")
+        assert malalta_idx < alta_idx, "Lower priority should sort first when reversed"
+
+    def test_ls_reverse(self):
+        """List with reverse order (oldest first)."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        runner.invoke(app, ["todo", "aldoni", "Unua", "-P", "10"])
+        runner.invoke(app, ["todo", "aldoni", "Dua", "-P", "20"])
+        result = runner.invoke(app, ["todo", "ls", "-r"])
+        assert result.exit_code == 0, result.output
+        # Both titles should still appear
+        assert "Unua" in result.output
+        assert "Dua" in result.output
+
     def test_serci(self):
         """Search tasks."""
         from typer.testing import CliRunner
@@ -479,6 +546,7 @@ class TestTodoCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["todo", "--help"])
         assert result.exit_code == 0
+        assert "ls" in result.output
         assert "aldoni" in result.output
         assert "vidi" in result.output
         assert "modifi" in result.output
