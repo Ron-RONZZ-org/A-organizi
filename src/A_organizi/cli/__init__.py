@@ -10,6 +10,7 @@ from A_organizi.cli.kalendaro import kalendaro_app
 from A_organizi.cli.okazajo import okazajo_app
 from A_organizi.cli.taglibro import taglibro_app
 from A_organizi.cli.todo import todo_app
+import A_organizi.cli.todo_crud  # noqa: F401 — triggers @todo_app.command() registration
 
 app = typer.Typer(
     name="organizi",
