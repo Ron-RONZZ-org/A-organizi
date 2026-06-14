@@ -23,9 +23,6 @@ def setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Patch data dir and reset service singletons."""
     import A_organizi.data.storage as storage_module
 
-    monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-    monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
     import A_organizi.service.kalendaro as kal_svc
 
     monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
@@ -226,9 +223,6 @@ class TestKalendaroCLI:
     def setup(self, monkeypatch, tmp_path):
         """Patch data dir and reset singletons."""
         import A_organizi.data.storage as storage_module
-
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
         import A_organizi.service.kalendaro as kal_svc
 
@@ -442,14 +436,15 @@ class TestOkazajoAldoniCLI:
         import A_organizi.data.storage as storage_module
         import A_organizi.service.kalendaro as kal_svc
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
         import A_organizi.cli.kalendaro as kal_cli
-        monkeypatch.setattr(kal_cli, "probe_calendar_config",
-                            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"})
+        monkeypatch.setattr(
+            kal_cli,
+            "probe_calendar_config",
+            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"},
+        )
         monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
 
     def _add_calendar(self, runner, app, url="https://cal.ics"):
@@ -657,8 +652,6 @@ class TestOkazajoModifiCLI:
         import A_organizi.data.storage as storage_module
         import A_organizi.service.kalendaro as kal_svc
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
@@ -762,8 +755,6 @@ class TestViciCLI:
         import A_organizi.data.storage as storage_module
         import A_organizi.service.kalendaro as kal_svc
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
@@ -949,8 +940,6 @@ class TestReproviCLI:
         import A_organizi.data.storage as storage_module
         import A_organizi.service.kalendaro as kal_svc
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 

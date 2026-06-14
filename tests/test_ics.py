@@ -201,9 +201,7 @@ class TestInsertIcsEvents:
         """Set up a clean database."""
         import A_organizi.data.storage as storage_module
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
+        
         import A_organizi.service.kalendaro as kal_svc
 
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
@@ -320,9 +318,7 @@ class TestImportExportCLI:
         """Patch data dir and reset singletons."""
         import A_organizi.data.storage as storage_module
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
+        
         import A_organizi.service.kalendaro as kal_svc
 
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)

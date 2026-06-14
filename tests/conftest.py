@@ -16,8 +16,5 @@ def isolate_organizi(monkeypatch, tmp_path):
     kalendaro_module._evento_service = None
     kalendaro_module._kalendaro_service = None
 
-    monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-    monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
     # Redirect ALL A-core paths to tmp_path (prevents LinksDB etc. hitting real ~/.local/share/A/)
     monkeypatch.setenv("A_DIR", str(tmp_path))
