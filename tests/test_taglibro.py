@@ -22,8 +22,6 @@ def setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Patch data dir and reset service singletons."""
     import A_organizi.data.storage as storage_module
 
-    monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-    monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
     # Reset service singletons
     import A_organizi.service as svc_module
@@ -238,9 +236,7 @@ class TestTaglibroCLI:
         """Patch data dir and reset singletons."""
         import A_organizi.data.storage as storage_module
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
+        
         import A_organizi.service as svc_module
 
         monkeypatch.setattr("A_organizi.service.taglibro._taglibro_service", None)

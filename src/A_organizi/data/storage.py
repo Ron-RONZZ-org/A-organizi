@@ -8,9 +8,6 @@ from A.core.paths import data_dir
 from A.core.backup_targets import BackupTarget
 from A.data.base import SQLiteDB, backup_db, health_check
 
-_DATA_DIR: Path = data_dir()
-_DB_FILE: Path = _DATA_DIR / "organizi.db"
-
 _db_instance: SQLiteDB | None = None
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -170,10 +167,10 @@ _CREATE_INDEXES = [
 
 def ensure_dirs() -> None:
     """Ensure data directory exists."""
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir().mkdir(parents=True, exist_ok=True)
 
 
-def get_db() -> SQLiteDB:
+def get_db(path: Path | None = None) -> SQLiteDB:
     """Get or create the shared database connection (singleton).
 
     All callers within the same process share one ``SQLiteDB`` instance,
@@ -183,17 +180,22 @@ def get_db() -> SQLiteDB:
     The connection is lazily created on first call and cached in
     ``_db_instance``. Tests can reset the singleton by setting
     ``A_organizi.data.storage._db_instance = None`` in their teardown.
+
+    Args:
+        path: Optional explicit database path. If omitted, defaults to
+            ``data_dir() / "organizi.db"`` (respects ``A_DIR`` env var).
     """
     global _db_instance
     if _db_instance is not None:
         return _db_instance
 
+    db_path = path or data_dir() / "organizi.db"
     ensure_dirs()
-    if not health_check(_DB_FILE):
+    if not health_check(db_path):
         from A.data.base import repair_db as _repair
-        _repair(_DB_FILE)
-    backup_db(_DB_FILE)
-    db = SQLiteDB(_DB_FILE)
+        _repair(db_path)
+    backup_db(db_path)
+    db = SQLiteDB(db_path)
 
     for stmt in _CREATE_STMTS:
         db.execute(stmt)
@@ -223,7 +225,7 @@ def get_backup_targets() -> list[BackupTarget]:
     """Return backup targets for A-organizi."""
     return [
         BackupTarget(
-            path=_DB_FILE,
+            path=data_dir() / "organizi.db",
             category="data",
             module="organizi",
             label="Organizi database",

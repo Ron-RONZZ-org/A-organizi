@@ -22,8 +22,6 @@ def setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Patch data dir and reset service singletons."""
     import A_organizi.data.storage as storage_module
 
-    monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-    monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
     monkeypatch.setattr("A_organizi.service.todo._todo_service", None)
     monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
@@ -281,9 +279,7 @@ class TestTodoCLI:
         """Patch data dir and reset singletons."""
         import A_organizi.data.storage as storage_module
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
+        
         monkeypatch.setattr("A_organizi.service.todo._todo_service", None)
         monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
 

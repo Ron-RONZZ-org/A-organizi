@@ -22,8 +22,6 @@ def mock_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Create a temporary database for label tests."""
     import A_organizi.data.storage as storage_module
 
-    monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-    monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
     # Use get_db() after patching
     return storage_module.get_db()
@@ -288,9 +286,7 @@ class TestServiceLayer:
         """Verify etikedo service is an EtikedoService instance."""
         import A_organizi.data.storage as storage_module
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
+        
         from A_organizi.service import get_etikedo_service, EtikedoService
 
         svc = get_etikedo_service()
@@ -300,9 +296,7 @@ class TestServiceLayer:
         """Verify get_etikedo_service returns the same instance."""
         import A_organizi.data.storage as storage_module
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
+        
         from A_organizi.service import get_etikedo_service
 
         s1 = get_etikedo_service()
@@ -323,9 +317,7 @@ class TestEtikedoCLI:
         """Patch data dir and reset service singletons."""
         import A_organizi.data.storage as storage_module
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
-
+        
         # Reset service singletons for each test
         monkeypatch.setattr("A_organizi.service.etikedo._etikedo_service", None)
 

@@ -20,13 +20,13 @@ sys.path.insert(0, str(_TEST_DIR.parent.parent / "A-core" / "src"))
 
 @pytest.fixture
 def mock_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """Mock data directory to temporary path."""
-    import A_organizi.data.storage as storage_module
+    """Redirect data dir and return the expected directory path."""
+    from A.core.testing import patch_paths
 
-    data_dir = tmp_path / ".local" / "share" / "A"
-    monkeypatch.setattr(storage_module, "_DATA_DIR", data_dir)
-    monkeypatch.setattr(storage_module, "_DB_FILE", data_dir / "organizi.db")
-    return data_dir
+    patch_paths(monkeypatch, tmp_path)
+    from A.core.paths import data_dir
+
+    return data_dir()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
