@@ -195,35 +195,13 @@ def _combine_date_time(
 
 @okazajo_app.command()
 def aldoni(
-    # Positional arguments (must precede Options in Typer)
-    titolo: Optional[str] = typer.Argument(
-        None,
-        help=tr_multi(
-            "Titolo de evento (aŭ superregado por -R).",
-            "Event title (or override for -R).",
-            "Titre de l'événement (ou remplacement pour -R).",
-        ),
-    ),
-    komenco: Optional[str] = typer.Argument(
-        None,
-        help=tr_multi(
-            "Komenca horo (HHMM, defaŭlte 0000).",
-            "Start time (HHMM, default 0000).",
-            "Heure de début (HHMM, défaut 0000).",
-        ),
-    ),
-    fino: Optional[str] = typer.Argument(
-        None,
-        help=tr_multi(
-            "Fina horo (HHMM, defaŭlte 2359).",
-            "End time (HHMM, default 2359).",
-            "Heure de fin (HHMM, défaut 2359).",
-        ),
-    ),
-    # Options
     kalendaro: Optional[str] = typer.Option(
         None, "--kalendaro", "-k",
         help=tr_multi("Kalendaro UUID.", "Calendar UUID.", "UUID du calendrier."),
+    ),
+    titolo: Optional[str] = typer.Option(
+        None, "--titolo", "-t",
+        help=tr_multi("Titolo de evento.", "Event title.", "Titre de l'événement."),
     ),
     dato: Optional[str] = typer.Option(
         None, "--dato", "-d",
@@ -231,6 +209,22 @@ def aldoni(
             "Dato (YYYYMMDD aŭ YYYY-MM-DD).",
             "Date (YYYYMMDD or YYYY-MM-DD).",
             "Date (AAAAMMJJ ou AAAA-MM-JJ).",
+        ),
+    ),
+    komenco: Optional[str] = typer.Option(
+        None, "--komenco",
+        help=tr_multi(
+            "Komenca horo (HHMM, defaŭlte 0000).",
+            "Start time (HHMM, default 0000).",
+            "Heure de début (HHMM, défaut 0000).",
+        ),
+    ),
+    fino: Optional[str] = typer.Option(
+        None, "--fino",
+        help=tr_multi(
+            "Fina horo (HHMM, defaŭlte 2359).",
+            "End time (HHMM, default 2359).",
+            "Heure de fin (HHMM, défaut 2359).",
         ),
     ),
     dato_gis: Optional[str] = typer.Option(
@@ -256,15 +250,9 @@ def aldoni(
     ripeto: Optional[str] = typer.Option(
         None, "--ripeto", "-r",
         help=tr_multi(
-            "Ripeto (RRULE). Mallongigoj: daily, weekly, monthly, yearly, "
-            "weekdays, weekends. Ekz: FREQ=DAILY, "
-            "FREQ=WEEKLY;BYDAY=MO,WE,FR, FREQ=MONTHLY;BYDAY=1MO.",
-            "Recurrence (RRULE). Shorthands: daily, weekly, monthly, yearly, "
-            "weekdays, weekends. Examples: FREQ=DAILY, "
-            "FREQ=WEEKLY;BYDAY=MO,WE,FR, FREQ=MONTHLY;BYDAY=1MO.",
-            "Récurrence (RRULE). Raccourcis: daily, weekly, monthly, yearly, "
-            "weekdays, weekends. Ex: FREQ=DAILY, "
-            "FREQ=WEEKLY;BYDAY=MO,WE,FR, FREQ=MONTHLY;BYDAY=1MO.",
+            "Ripeto (RRULE, ekz: FREQ=DAILY).",
+            "Recurrence (RRULE, e.g. FREQ=DAILY).",
+            "Récurrence (RRULE, ex: FREQ=DAILY).",
         ),
     ),
     retposto: Optional[list[str]] = typer.Option(
@@ -276,13 +264,7 @@ def aldoni(
         ),
     ),
 ) -> None:
-    """Aldoni novan eventon al kalendaro.
-
-    Ekzemploj:
-        A okazajo aldoni \"Standup\" 0900 0915 --dato 20260602
-        A okazajo aldoni \"All-day\" --dato 20260602
-        A okazajo aldoni \"Override\" -R mesaĝa_uuid
-    """
+    """Aldoni novan eventon al kalendaro."""
     cal_svc = get_kalendaro_service()
     cal_uuid = _resolve_calendar(cal_svc, kalendaro)
     if not cal_uuid:
@@ -302,9 +284,9 @@ def aldoni(
     # ── Traditional single-event workflow ─────────────────────────────────
     if titolo is None or dato is None:
         error(tr_multi(
-            "Bezonata titolo kaj --dato (aŭ uzu --retposto/-R).",
-            "Title and --dato required (or use --retposto/-R).",
-            "Titre et --dato requis (ou utilisez --retposto/-R).",
+            "Bezonata --titolo, --dato (aŭ uzu --retposto/-R).",
+            "--titolo and --dato required (or use --retposto/-R).",
+            "--titolo et --dato requis (ou utilisez --retposto/-R).",
         ))
         raise typer.Exit(1)
 
