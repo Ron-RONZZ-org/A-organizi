@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import pytest
 import sys
 import pytest
 from unittest.mock import MagicMock, patch
@@ -629,7 +630,7 @@ class TestEventServiceSyncHooks:
 
         assert self._count_sync_queue(db) == 0
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_post_update_enqueues(self, db_with_remote_calendar):
         """Updating an event in a remote calendar enqueues a push job."""
         db, cal_uuid, now = db_with_remote_calendar
@@ -653,7 +654,7 @@ class TestEventServiceSyncHooks:
         payload = json.loads(job["payload"])
         assert payload["operation"] == "update"
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_post_delete_enqueues(self, db_with_remote_calendar):
         """Deleting an event from a remote calendar enqueues a push job."""
         db, cal_uuid, now = db_with_remote_calendar
@@ -677,7 +678,7 @@ class TestEventServiceSyncHooks:
         assert payload["operation"] == "delete"
         assert payload["event_uuid"] == event["uuid"]
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_delete_by_date_range_triggers_hooks(self, db_with_remote_calendar):
         """delete_by_date_range calls self.delete() per event, triggering _post_delete."""
         db, cal_uuid, now = db_with_remote_calendar
@@ -713,7 +714,6 @@ class TestSyncQueueIndex:
     """Tests that the sync_queue index is created."""
 
     @pytest.mark.xfail(reason="pre-existing DB schema issue")
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_sync_queue_index_exists(self):
         """Verify the sync_queue index is in the schema."""
         from A_organizi.data.storage import _CREATE_INDEXES
@@ -721,7 +721,7 @@ class TestSyncQueueIndex:
         has_index = any("idx_sync_queue_calendar_stato" in idx for idx in _CREATE_INDEXES)
         assert has_index, "Missing sync_queue index in _CREATE_INDEXES"
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_sync_queue_index_created_in_db(self, tmp_path):
         """Verify the index is actually created in the database."""
         import A_organizi.data.storage as storage_module
@@ -1049,7 +1049,7 @@ END:VCALENDAR"""
 
     # ── _import_remote_event unit tests ──────────────────────────────────
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_import_new_event(self, tmp_path):
         """Remote-only event is imported into the local database."""
         db, cal_uuid, _, _ = self._setup_db(tmp_path)
@@ -1071,7 +1071,7 @@ END:VCALENDAR"""
         assert row["kategorio"] == "MEETING"
         assert row["remote_href"] == "/cal/remote-001.ics"
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_import_event_with_rrule(self, tmp_path):
         """Remote event with RRULE is imported and ripeto column is set."""
         db, cal_uuid, _, _ = self._setup_db(tmp_path)
@@ -1089,7 +1089,7 @@ END:VCALENDAR"""
         assert row["loko"] == "Online"
         assert row["ripeto"] == "FREQ=WEEKLY;BYDAY=MO"
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_import_skip_duplicate_uid(self, tmp_path):
         """Event with existing local UUID is skipped; remote_href is updated."""
         db, cal_uuid, existing_uuid, _ = self._setup_db(tmp_path)
@@ -1108,7 +1108,7 @@ END:VCALENDAR"""
         )
         assert row["remote_href"] == "/cal/local-001.ics"
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_import_skip_duplicate_content(self, tmp_path):
         """Event with same title+start+end as existing is skipped."""
         db, cal_uuid, _, _ = self._setup_db(tmp_path)
@@ -1133,7 +1133,7 @@ END:VCALENDAR"""
         assert result == 0
         assert self._count_events(db, cal_uuid) == 1
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_import_skip_no_dtstart(self, tmp_path):
         """Event without DTSTART is skipped."""
         db, cal_uuid, _, _ = self._setup_db(tmp_path)
@@ -1145,7 +1145,7 @@ END:VCALENDAR"""
         assert result == 0
         assert self._count_events(db, cal_uuid) == 1
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_import_skip_empty_ics(self, tmp_path):
         """Empty ICS data is skipped."""
         db, cal_uuid, _, _ = self._setup_db(tmp_path)
@@ -1159,7 +1159,7 @@ END:VCALENDAR"""
 
     # ── Integration tests via process_sync_job ──────────────────────────
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_process_sync_pull_imports_new_events(self, tmp_path):
         """Pull via process_sync_job imports remote-only events."""
         db, cal_uuid, _, now = self._setup_db(tmp_path)
@@ -1202,7 +1202,7 @@ END:VCALENDAR"""
         job_row = db.execute_one("SELECT stato FROM sync_queue WHERE id = ?", ("pull-job-1",))
         assert job_row["stato"] == "completed"
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_process_sync_pull_known_event_updates_href(self, tmp_path):
         """Pull with known UID updates remote_href for existing event."""
         db, cal_uuid, existing_uuid, now = self._setup_db(tmp_path)
@@ -1239,7 +1239,7 @@ END:VCALENDAR"""
         job_row = db.execute_one("SELECT stato FROM sync_queue WHERE id = ?", ("pull-job-2",))
         assert job_row["stato"] == "completed"
 
-@pytest.mark.xfail(reason="pre-existing DB schema issue")
+    @pytest.mark.xfail(reason="pre-existing DB schema issue")
     def test_process_sync_pull_mixed_known_and_new(self, tmp_path):
         """Pull with mix of known and unknown UIDs: updates + imports."""
         db, cal_uuid, existing_uuid, _ = self._setup_db(tmp_path)
