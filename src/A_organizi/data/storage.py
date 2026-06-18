@@ -8,6 +8,9 @@ from A.core.paths import data_dir
 from A.core.backup_targets import BackupTarget
 from A.data.base import SQLiteDB, backup_db, health_check
 
+_DATA_DIR: Path = data_dir()
+_DB_FILE: Path = _DATA_DIR / "organizi.db"
+
 _db_instance: SQLiteDB | None = None
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -37,7 +40,6 @@ CREATE TABLE IF NOT EXISTS eventoj (
     ripeto TEXT NOT NULL DEFAULT '',
     partoprenantoj TEXT NOT NULL DEFAULT '[]',
     priskribo TEXT NOT NULL DEFAULT '',
-    remote_href TEXT NOT NULL DEFAULT '',
     kreita_je TEXT NOT NULL,
     modifita_je TEXT NOT NULL
 );
@@ -161,16 +163,15 @@ _CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_taglibro_titolo_norm ON taglibro(titolo_norm);",
     "CREATE INDEX IF NOT EXISTS idx_taglibro_priskribo_norm ON taglibro(priskribo_norm);",
     "CREATE INDEX IF NOT EXISTS idx_etikedoj_teksto_norm ON etikedoj(teksto_norm);",
-    "CREATE INDEX IF NOT EXISTS idx_sync_queue_calendar_stato ON sync_queue(calendar_uuid, stato);",
 ]
 
 
 def ensure_dirs() -> None:
     """Ensure data directory exists."""
-    data_dir().mkdir(parents=True, exist_ok=True)
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def get_db(path: Path | None = None) -> SQLiteDB:
+def get_db() -> SQLiteDB:
     """Get or create the shared database connection (singleton).
 
     All callers within the same process share one ``SQLiteDB`` instance,
@@ -180,52 +181,32 @@ def get_db(path: Path | None = None) -> SQLiteDB:
     The connection is lazily created on first call and cached in
     ``_db_instance``. Tests can reset the singleton by setting
     ``A_organizi.data.storage._db_instance = None`` in their teardown.
-
-    Args:
-        path: Optional explicit database path. If omitted, defaults to
-            ``data_dir() / "organizi.db"`` (respects ``A_DIR`` env var).
     """
     global _db_instance
     if _db_instance is not None:
         return _db_instance
 
-    db_path = path or data_dir() / "organizi.db"
     ensure_dirs()
-    if not health_check(db_path):
+    if not health_check(_DB_FILE):
         from A.data.base import repair_db as _repair
-        _repair(db_path)
-    backup_db(db_path)
-    db = SQLiteDB(db_path)
+        _repair(_DB_FILE)
+    backup_db(_DB_FILE)
+    db = SQLiteDB(_DB_FILE)
 
     for stmt in _CREATE_STMTS:
         db.execute(stmt)
     for stmt in _CREATE_INDEXES:
         db.execute(stmt)
 
-    # Migrations for existing databases
-    _apply_migrations(db)
-
     _db_instance = db
     return db
-
-
-def _apply_migrations(db) -> None:
-    """Apply schema migrations for existing databases.
-
-    Add new columns that were introduced after the initial schema release.
-    Each migration is idempotent (silently skipped if already applied).
-    """
-    try:
-        db.execute("ALTER TABLE eventoj ADD COLUMN remote_href TEXT NOT NULL DEFAULT ''")
-    except Exception:
-        pass  # Column already exists
 
 
 def get_backup_targets() -> list[BackupTarget]:
     """Return backup targets for A-organizi."""
     return [
         BackupTarget(
-            path=data_dir() / "organizi.db",
+            path=_DB_FILE,
             category="data",
             module="organizi",
             label="Organizi database",
