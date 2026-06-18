@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -21,9 +22,6 @@ sys.path.insert(0, str(_TEST_DIR.parent.parent / "A-core" / "src"))
 def setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Patch data dir and reset service singletons."""
     import A_organizi.data.storage as storage_module
-
-    monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-    monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
     import A_organizi.service.kalendaro as kal_svc
 
@@ -225,9 +223,6 @@ class TestKalendaroCLI:
     def setup(self, monkeypatch, tmp_path):
         """Patch data dir and reset singletons."""
         import A_organizi.data.storage as storage_module
-
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
 
         import A_organizi.service.kalendaro as kal_svc
 
@@ -441,14 +436,15 @@ class TestOkazajoAldoniCLI:
         import A_organizi.data.storage as storage_module
         import A_organizi.service.kalendaro as kal_svc
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
         import A_organizi.cli.kalendaro as kal_cli
-        monkeypatch.setattr(kal_cli, "probe_calendar_config",
-                            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"})
+        monkeypatch.setattr(
+            kal_cli,
+            "probe_calendar_config",
+            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"},
+        )
         monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
 
     def _add_calendar(self, runner, app, url="https://cal.ics"):
@@ -466,12 +462,32 @@ class TestOkazajoAldoniCLI:
         runner = CliRunner()
         cal_uuid = self._add_calendar(runner, app)
 
-        # With -k but no --titolo or --dato
+        # With -k but no titolo or --dato
         result = runner.invoke(app, [
             "okazajo", "aldoni", "-k", cal_uuid[:8],
         ])
         assert result.exit_code != 0
         assert "titolo" in result.output.lower() or "dato" in result.output.lower()
+
+    def test_aldoni_positional_titolo(self):
+        """Titolo can be given as positional argument (new UX)."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        result = runner.invoke(app, [
+            "okazajo", "aldoni",
+            "Meeting",       # positional titolo
+            "1000",           # positional komenco
+            "1130",           # positional fino
+            "-k", cal_uuid[:8],
+            "--dato", "20260602",
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Aldonis" in result.output
+        assert "Meeting" in result.output
 
     def test_aldoni_with_explicit_calendar(self):
         """Basic event creation with explicit -k, --dato and --komenco/--fino."""
@@ -483,11 +499,11 @@ class TestOkazajoAldoniCLI:
 
         result = runner.invoke(app, [
             "okazajo", "aldoni",
+            "Test Event",     # positional titolo
+            "1000",           # positional komenco
+            "1130",           # positional fino
             "-k", cal_uuid[:8],
-            "--titolo", "Test Event",
             "--dato", "20260602",
-            "--komenco", "1000",
-            "--fino", "1130",
         ])
         assert result.exit_code == 0, result.output
         assert "Aldonis" in result.output
@@ -503,7 +519,7 @@ class TestOkazajoAldoniCLI:
 
         result = runner.invoke(app, [
             "okazajo", "aldoni",
-            "--titolo", "Auto Event",
+            "Auto Event",     # positional titolo
             "--dato", "20260602",
         ])
         assert result.exit_code == 0, result.output
@@ -519,11 +535,11 @@ class TestOkazajoAldoniCLI:
 
         result = runner.invoke(app, [
             "okazajo", "aldoni",
+            "Daily Standup",  # positional titolo
+            "0900",           # positional komenco
+            "0915",           # positional fino
             "-k", cal_uuid[:8],
-            "--titolo", "Daily Standup",
             "--dato", "20260602",
-            "--komenco", "0900",
-            "--fino", "0915",
             "--ripeto", "daily",
         ])
         assert result.exit_code == 0, result.output
@@ -544,8 +560,8 @@ class TestOkazajoAldoniCLI:
 
         result = runner.invoke(app, [
             "okazajo", "aldoni",
+            "Bad RRULE",     # positional titolo
             "-k", cal_uuid[:8],
-            "--titolo", "Bad RRULE",
             "--dato", "20260602",
             "--ripeto", "FREQ=HOURLY",
         ])
@@ -565,11 +581,11 @@ class TestOkazajoAldoniCLI:
 
         result = runner.invoke(app, [
             "okazajo", "aldoni",
+            "Late Event",    # positional titolo
+            "2200",          # positional komenco
+            "0100",          # positional fino
             "-k", cal_uuid[:8],
-            "--titolo", "Late Event",
             "--dato", "20260602",
-            "--komenco", "2200",
-            "--fino", "0100",
         ])
         assert result.exit_code == 0, result.output
 
@@ -592,12 +608,12 @@ class TestOkazajoAldoniCLI:
 
         result = runner.invoke(app, [
             "okazajo", "aldoni",
+            "Multi-Day",     # positional titolo
+            "1000",          # positional komenco
+            "1800",          # positional fino
             "-k", cal_uuid[:8],
-            "--titolo", "Multi-Day",
             "--dato", "20260602",
-            "--komenco", "1000",
             "--dato-gis", "20260605",
-            "--fino", "1800",
         ])
         assert result.exit_code == 0, result.output
 
@@ -607,17 +623,24 @@ class TestOkazajoAldoniCLI:
         assert "2026-06-05" in events[0]["fino"]
 
     def test_help_shows_new_options(self):
-        """Help text should show the new --dato and --ripeto with RRULE."""
+        """Help text should show positional TITOLO, KOMENCO, FINO and the new --ripeto with RRULE."""
         from typer.testing import CliRunner
         from A_organizi.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["okazajo", "aldoni", "--help"])
         assert result.exit_code == 0
+        # Positional args shown in help
+        assert "TITOLO" in result.output
+        assert "KOMENCO" in result.output
+        assert "FINO" in result.output
+        # Options
         assert "--dato" in result.output
         assert "--dato-gis" in result.output
         assert "--ripeto" in result.output
-        assert "RRULE" in result.output or "FREQ" in result.output
+        # RRULE examples in help
+        assert "FREQ=DAILY" in result.output
+        assert "FREQ=WEEKLY" in result.output
 
 
 class TestOkazajoModifiCLI:
@@ -629,8 +652,6 @@ class TestOkazajoModifiCLI:
         import A_organizi.data.storage as storage_module
         import A_organizi.service.kalendaro as kal_svc
 
-        monkeypatch.setattr(storage_module, "_DATA_DIR", tmp_path)
-        monkeypatch.setattr(storage_module, "_DB_FILE", tmp_path / "organizi.db")
         monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
         monkeypatch.setattr(kal_svc, "_evento_service", None)
 
@@ -717,6 +738,272 @@ class TestOkazajoModifiCLI:
             "--ripeto", "INVALID",
         ])
         assert result.exit_code != 0
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Vici (sync queue monitor) CLI tests
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestViciCLI:
+    """Tests for okazajo vici (sync queue monitor)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, tmp_path):
+        """Patch data dir and reset singletons."""
+        import A_organizi.data.storage as storage_module
+        import A_organizi.service.kalendaro as kal_svc
+
+        monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
+        monkeypatch.setattr(kal_svc, "_evento_service", None)
+
+        import A_organizi.cli.kalendaro as kal_cli
+        monkeypatch.setattr(kal_cli, "probe_calendar_config",
+                            lambda url, user, pw: {"count": "0", "description": "0 evento(j)"})
+        monkeypatch.setattr(kal_cli, "set_password", lambda uuid, pw: None)
+
+    def _add_calendar(self, runner, app):
+        """Add a calendar and return its full UUID."""
+        from A_organizi.service.kalendaro import get_kalendaro_service
+        svc = get_kalendaro_service()
+        result = svc.create({"url": "https://cal.ics", "username": "u", "remote": 1})
+        return result["uuid"]
+
+    def test_vici_empty(self):
+        """No sync queue entries should show empty message."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "vici"])
+        assert result.exit_code == 0, result.output
+        assert "Neniu sinkroniga tasko trovita" in result.output
+
+    def test_vici_shows_entries(self):
+        """Entries in sync queue should be displayed."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        # Enqueue a sync job directly
+        from A_organizi.utils.sync import queue_sync
+        from A_organizi.service.kalendaro import get_evento_service
+
+        db = get_evento_service().db
+        queue_sync(db, cal_uuid, "push", {"event_uuid": "test1234"})
+
+        result = runner.invoke(app, ["okazajo", "vici"])
+        assert result.exit_code == 0, result.output
+        # Check for Rich table headers that survive narrow-terminal truncation
+        assert "Kreita" in result.output or "ID" in result.output
+
+    def test_vici_filter_by_status(self):
+        """Filter sync queue by status."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.utils.sync import queue_sync
+        from A_organizi.service.kalendaro import get_evento_service
+
+        db = get_evento_service().db
+        queue_sync(db, cal_uuid, "push", {"event_uuid": "e1"})
+        queue_sync(db, cal_uuid, "pull", {})
+
+        # Filter by pending — both jobs start as pending
+        result = runner.invoke(app, ["okazajo", "vici", "pending"])
+        assert result.exit_code == 0, result.output
+        # Check for column header that survives Rich truncation in narrow terminals
+        assert "Stato" in result.output
+
+    def test_vici_filter_by_calendar(self):
+        """Filter sync queue by calendar UUID (full UUID, not prefix)."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.utils.sync import queue_sync
+        from A_organizi.service.kalendaro import get_evento_service
+
+        db = get_evento_service().db
+        queue_sync(db, cal_uuid, "push", {"event_uuid": "e1"})
+
+        # Must pass full UUID for DB filter match
+        result = runner.invoke(app, [
+            "okazajo", "vici", "--kalendaro", cal_uuid,
+        ])
+        assert result.exit_code == 0, result.output
+        assert "Kreita" in result.output or "ID" in result.output
+
+    def test_vici_help_shown(self):
+        """Help text should show for vici."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "vici", "--help"])
+        assert result.exit_code == 0
+        assert "STATO" in result.output
+        assert "--kalendaro" in result.output
+
+    def test_vici_hides_completed_by_default(self):
+        """Default vici hides completed jobs, shows only pending/failed."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.service.kalendaro import get_evento_service
+        db = get_evento_service().db
+        now = "2026-06-03T12:00:00"
+        # Insert a completed job
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('done-job', ?, 'push', '{}', 'completed', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+        # Insert a pending job
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('pend-job', ?, 'push', '{}', 'pending', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+
+        result = runner.invoke(app, ["okazajo", "vici"])
+        assert result.exit_code == 0, result.output
+        assert "pend-job" in result.output or "pend" in result.output
+        assert "done-job" not in result.output
+
+    def test_vici_all_shows_completed(self):
+        """vici --all shows all statuses including completed."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.service.kalendaro import get_evento_service
+        db = get_evento_service().db
+        now = "2026-06-03T12:00:00"
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('done-job', ?, 'push', '{}', 'completed', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+
+        result = runner.invoke(app, ["okazajo", "vici", "--all"])
+        assert result.exit_code == 0, result.output
+        assert "done-job" in result.output or "done" in result.output
+
+    def test_vici_completed_filter_still_works(self):
+        """vici completed still shows only completed jobs."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        cal_uuid = self._add_calendar(runner, app)
+
+        from A_organizi.service.kalendaro import get_evento_service
+        db = get_evento_service().db
+        now = "2026-06-03T12:00:00"
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('done-job', ?, 'push', '{}', 'completed', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('pend-job', ?, 'push', '{}', 'pending', '', ?, ?)",
+            (cal_uuid, now, now),
+        )
+
+        result = runner.invoke(app, ["okazajo", "vici", "completed"])
+        assert result.exit_code == 0, result.output
+        assert "done-job" in result.output or "done" in result.output
+        assert "pend-job" not in result.output
+
+
+class TestReproviCLI:
+    """Tests for okazajo reprovi (retry failed sync jobs)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch, tmp_path):
+        """Patch data dir and reset singletons."""
+        import A_organizi.data.storage as storage_module
+        import A_organizi.service.kalendaro as kal_svc
+
+        monkeypatch.setattr(kal_svc, "_kalendaro_service", None)
+        monkeypatch.setattr(kal_svc, "_evento_service", None)
+
+    def test_reprovi_no_failed_jobs(self):
+        """No failed jobs shows 'neniu malsukcesinta tasko'."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "reprovi"])
+        assert result.exit_code == 0, result.output
+        assert "Neniu malsukcesinta" in result.output
+
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_reprovi_all(self, mock_process):
+        """Reprovi all processes all failed jobs."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+        from A_organizi.service.kalendaro import get_evento_service
+
+        runner = CliRunner()
+        db = get_evento_service().db
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('fjob', 'cal-uuid', 'push', '{}', 'failed', 'HTTP 500', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
+        )
+
+        result = runner.invoke(app, ["okazajo", "reprovi"])
+        assert result.exit_code == 0, result.output
+        mock_process.assert_called_once()
+
+    @patch("A_organizi.utils.sync.process_sync_job")
+    def test_reprovi_specific_job(self, mock_process):
+        """Reprovi with job ID retries that specific job."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+        from A_organizi.service.kalendaro import get_evento_service
+
+        runner = CliRunner()
+        db = get_evento_service().db
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('job-a', 'cal-uuid', 'push', '{}', 'failed', 'err', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
+        )
+        db.execute(
+            "INSERT INTO sync_queue (id, calendar_uuid, operacio, payload, stato, eraro, kreita_je, modifita_je)"
+            " VALUES ('job-b', 'cal-uuid', 'push', '{}', 'failed', 'err', '2026-06-02T12:00:00', '2026-06-02T12:00:00')"
+        )
+
+        result = runner.invoke(app, ["okazajo", "reprovi", "job-a"])
+        assert result.exit_code == 0, result.output
+        mock_process.assert_called_once()
+        args, _ = mock_process.call_args
+        assert args[1]["id"] == "job-a"
+
+    def test_reprovi_help_shown(self):
+        """Help text should show for reprovi."""
+        from typer.testing import CliRunner
+        from A_organizi.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["okazajo", "reprovi", "--help"])
+        assert result.exit_code == 0
+        assert "JOB_ID" in result.output or "job" in result.output.lower()
 
 
 if __name__ == "__main__":
